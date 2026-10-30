@@ -10,9 +10,9 @@
  *   N_i = c_i u - (D_i + D_osc) grad c_i + z_i D_i c_i (S/Q)
  *   S = sum_j z_j D_j grad c_j,  Q = sum_j z_j^2 D_j c_j   (j = OH, SIL, TMA)
  * The last term is electromigration in the diffusion potential (zero current + electroneutrality).
- * uds_flux adds it to the convective mass flux of UDS 0 and 1, so Fluent upwinds it like convection.
- * S.A is evaluated on each face from the two cell values ((c1 - c0) A.A / A.dr, exact for this
- * orthogonal Cartesian mesh), so the flux is identical on both sides of a parallel partition boundary.
+ * face_source adds it (and the D_osc mixing) as a conservative cell source; Fluent 24.1 attached neither
+ * the UDS flux hook nor a per-UDS diffusivity UDF. S.A is evaluated on each face from the two cell values
+ * ((c1 - c0) A.A / A.dr, exact for this orthogonal Cartesian mesh), identically from both sides.
  *
  * Reaction on poly-Si faces (zone POLY_ID) as a source in the wall-adjacent cell:
  *   Si + 2 OH- + 2 H2O -> SiO2(OH)2^2- + 2 H2,   r = K_SI (c/CB)^ORDER c/(c + EPS CB)  [mol Si/m2/s]
@@ -20,7 +20,7 @@
  *
  * Megasonic mixing: while the oscillating flow runs, accumulate_now (called after every time step by
  * run_case.py) sums u, v, u^2, v^2; finish_avg sets D_osc = OSC_SCALE (var_u + var_v) / OMEGA, i.e. |u1|^2 / (2 omega) for a
- * sinusoidal oscillation (upper bound of oscillatory dispersion), used afterwards in dosc_source (interior + exterior cells, so both sides of a partition agree).
+ * sinusoidal oscillation (upper bound of oscillatory dispersion), used afterwards in face_source (interior + exterior cells, so both sides of a partition agree).
  *
  * UDM: 0 poly length/cell area  1-4 sums u, v, uu, vv  5 D_osc  6 mean speed  7 etch rate [m/s]  8 samples
  */
@@ -187,68 +187,33 @@ DEFINE_ON_DEMAND(accumulate_now)
 #endif
 }
 
-/* convective mass flux + electromigration for the ions; plain convection for H2 */
+/* plain convection for every scalar. Electromigration is NOT here: the 24.1 UDS TUI never attached this
+ * hook (no "HOOK flux" on Puma 2026-10-30), so it lives in face_source. If the hook ever does attach,
+ * returning F_FLUX keeps it identical to Fluent's default and nothing is counted twice. */
 DEFINE_UDS_FLUX(uds_flux, f, t, i)
 {
-    real flux = NNULLP(THREAD_STORAGE(t, SV_FLUX)) ? F_FLUX(f, t) : 0.0;
-    real A[ND_ND], x0[ND_ND], x1[ND_ND], dr[ND_ND];
-    real zi, Di, coh0, csi0, coh1, csi1, geo, d_oh, d_si, s_dot_a, co, cs, q;
-    cell_t c0;
-    Thread *t0;
     hook_seen("flux", i);
-    if (i == 0) { zi = -1.0; Di = D_OH; }
-    else if (i == 1) { zi = -2.0; Di = D_SIL; }
-    else return flux;
-    if (!MIGRATION)
-        return flux;
-    if (BOUNDARY_FACE_THREAD_P(t) && THREAD_TYPE(t) == THREAD_F_WALL)
-        return flux;                                         /* nothing crosses a wall */
-    c0 = F_C0(f, t);
-    t0 = THREAD_T0(t);
-    if (!HAS_UDS(t0) || (!BOUNDARY_FACE_THREAD_P(t) && !HAS_UDS(THREAD_T1(t))) ||
-        (BOUNDARY_FACE_THREAD_P(t) && !HAS_UDS(t)))
-        return flux;                                         /* called before initialisation */
-    C_CENTROID(x0, c0, t0);
-    coh0 = cell_c(c0, t0, 0);
-    csi0 = cell_c(c0, t0, 1);
-    if (BOUNDARY_FACE_THREAD_P(t))
-    {
-        F_CENTROID(x1, f, t);
-        coh1 = RHO * F_UDSI(f, t, 0);
-        csi1 = RHO * F_UDSI(f, t, 1);
-    }
-    else
-    {
-        cell_t c1 = F_C1(f, t);
-        Thread *t1 = THREAD_T1(t);
-        C_CENTROID(x1, c1, t1);
-        coh1 = cell_c(c1, t1, 0);
-        csi1 = cell_c(c1, t1, 1);
-    }
-    F_AREA(A, f, t);
-    NV_VV(dr, =, x1, -, x0);
-    geo = NV_DOT(A, A) / NV_DOT(A, dr);                      /* grad c . A = (c1 - c0) geo */
-    d_oh = (coh1 - coh0) * geo;
-    d_si = (csi1 - csi0) * geo;
-    s_dot_a = -D_OH * d_oh - 2.0 * D_SIL * d_si + D_TMA * (d_oh + 2.0 * d_si);
-    co = 0.5 * (coh0 + coh1);
-    cs = 0.5 * (csi0 + csi1);
-    q = D_OH * MAX(co, 0.0) + 4.0 * D_SIL * MAX(cs, 0.0) + D_TMA * MAX(co + 2.0 * cs, 0.0);
-    q = MAX(q, 1e-9 * CB * D_TMA);
-    return flux + RHO * zi * Di * s_dot_a / q;               /* + rho (z D S/Q) . A */
+    return NNULLP(THREAD_STORAGE(t, SV_FLUX)) ? F_FLUX(f, t) : 0.0;
 }
 
-
-/* Megasonic mixing div(rho D_osc grad phi_i) as a cell source, because Fluent 24.1's settings API leaves
- * the per-UDS user-defined diffusivity field inactive (molecular rho D_i is set as a constant instead).
- * Two-point face flux k_f (phi_nb - phi_c), k_f = rho D_osc,f A.A / |A.dr| (exact on this orthogonal
- * mesh), D_osc,f = mean of the two cells; implicit part -sum k_f goes to dS. Interior faces only:
- * ASSUMED no D_osc flux through inlet/outlet/top boundaries (they are far from the slit). */
-static real dosc_source(cell_t c, Thread *t, int i, real *dsdphi)
+/* Face-flux terms that Fluent 24.1 cannot take through its settings API, added as a cell source:
+ *  (a) megasonic mixing div(rho D_osc grad phi_i): flux k_f (phi_nb - phi_c), k_f = rho D_osc,f A.A/|A.dr|,
+ *      D_osc,f = mean of the two cells (the per-UDS user-defined diffusivity field is inactive in 24.1);
+ *  (b) electromigration, ions only: outward flux J = z_i D_i c_f (S.A_out)/Q_f [mol/s per m depth],
+ *      S.A_out = sum_j z_j D_j (c_j,nb - c_j,c) A.A/|A.dr|, Q_f = sum_j z_j^2 D_j c_j,f,
+ *      c_f = mean of the two cells (central; migration is diffusion-like, cell Peclet << 1).
+ * Each face is computed identically from both sides, so the scheme is conservative across zones and
+ * partitions (exterior-cell UDS values are synced by Fluent; D_osc is set in exterior cells too).
+ * Exact on this orthogonal Cartesian mesh. Interior faces only: ASSUMED no mixing or migration flux through
+ * inlet/outlet/top (far from the slit, uniform specified values) and none through walls. */
+static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
 {
     int n;
-    real s = 0.0, kk = 0.0, dc = C_UDMI(c, t, UDM_DOSC), xc[ND_ND];
-    *dsdphi = 0.0;
+    real s = 0.0, diag = 0.0, dc = C_UDMI(c, t, UDM_DOSC), xc[ND_ND];
+    real zi = (i == 0) ? -1.0 : (i == 1) ? -2.0 : 0.0;
+    real Di = (i == 0) ? D_OH : (i == 1) ? D_SIL : D_H2;
+    real coh = cell_c(c, t, 0), csi = cell_c(c, t, 1), ci = cell_c(c, t, i);
+    int migrate = MIGRATION && zi != 0.0;
     C_CENTROID(xc, c, t);
     c_face_loop(c, t, n)
     {
@@ -256,24 +221,41 @@ static real dosc_source(cell_t c, Thread *t, int i, real *dsdphi)
         Thread *tf = C_FACE_THREAD(c, t, n);
         cell_t cn;
         Thread *tn;
-        real A[ND_ND], xn[ND_ND], dr[ND_ND], dn, k;
+        real A[ND_ND], xn[ND_ND], dr[ND_ND], dn, geo, k;
         if (BOUNDARY_FACE_THREAD_P(tf))
             continue;
         if (F_C0(f, tf) == c && THREAD_T0(tf) == t) { cn = F_C1(f, tf); tn = THREAD_T1(tf); }
         else { cn = F_C0(f, tf); tn = THREAD_T0(tf); }
         if (!HAS_UDM(tn) || !HAS_UDS(tn))
             continue;
-        dn = C_UDMI(cn, tn, UDM_DOSC);
-        if (dc <= 0.0 && dn <= 0.0)
-            continue;
         F_AREA(A, f, tf);
         C_CENTROID(xn, cn, tn);
         NV_VV(dr, =, xn, -, xc);
-        k = RHO * 0.5 * (dc + dn) * NV_DOT(A, A) / fabs(NV_DOT(A, dr));
-        s += k * (C_UDSI(cn, tn, i) - C_UDSI(c, t, i));
-        kk += k;
+        geo = NV_DOT(A, A) / fabs(NV_DOT(A, dr));             /* grad c . A_out = (c_nb - c_c) geo */
+        dn = C_UDMI(cn, tn, UDM_DOSC);
+        if (dc > 0.0 || dn > 0.0)                             /* (a) mixing */
+        {
+            k = RHO * 0.5 * (dc + dn) * geo;
+            s += k * (C_UDSI(cn, tn, i) - C_UDSI(c, t, i));
+            diag -= k;
+        }
+        if (migrate)                                          /* (b) electromigration */
+        {
+            real ohn = cell_c(cn, tn, 0), sin_ = cell_c(cn, tn, 1);
+            real d_oh = (ohn - coh) * geo, d_si = (sin_ - csi) * geo;
+            real s_a = -D_OH * d_oh - 2.0 * D_SIL * d_si + D_TMA * (d_oh + 2.0 * d_si);
+            real co = 0.5 * (coh + ohn), cs = 0.5 * (csi + sin_);
+            real q = D_OH * MAX(co, 0.0) + 4.0 * D_SIL * MAX(cs, 0.0) + D_TMA * MAX(co + 2.0 * cs, 0.0);
+            real cf = 0.5 * (ci + cell_c(cn, tn, i));
+            real w;
+            q = MAX(q, 1e-9 * CB * D_TMA);
+            w = zi * Di * s_a / q;                            /* outward drift "conductance" [m2/s per m] */
+            s -= w * cf;
+            if (w > 0.0)
+                diag -= 0.5 * w * RHO;                        /* d(-w c_f)/d phi_c, kept only if stabilising */
+        }
     }
-    *dsdphi = -kk / C_VOLUME(c, t);
+    *dsdphi = diag / C_VOLUME(c, t);
     return s / C_VOLUME(c, t);
 }
 
@@ -287,7 +269,7 @@ static real src(cell_t c, Thread *t, int i, real nu, real dS[], int eqn, int imp
         dS[eqn] = 0.0;
         return 0.0;
     }
-    s_mix = dosc_source(c, t, i, &ds_mix);
+    s_mix = face_source(c, t, i, &ds_mix);
     av = C_UDMI(c, t, UDM_AV);
     if (av <= 0.0)
     {

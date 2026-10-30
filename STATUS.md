@@ -4,8 +4,8 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
 50/50 nm, single-wafer spin tool with MegPie transducer. Formulas and sources: `docs/formulation.md`.
 
 ## Next step
-- Puma: `cd ~/project1 && git pull && bash submit_cases.sh A_f1_I2_t45 --setup-only` (smoke test);
-  send the log (`tail -n 100` per file; plain `tail -80` fails with two files) and fix what breaks.
+- Puma: smoke test `bash submit_cases.sh A_f1_I2_t45 --setup-only` until it finishes cleanly, then a full
+  M0_none run (no megasonics) to compare with the 1D model (bottom/top 0.96), then the rest.
 - Then all 16 cases (`bash submit_cases.sh .`), then `analyze_2d.py`.
 
 ## Log
@@ -28,6 +28,11 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
   as constant per-UDS diffusivity; D_osc mixing moved into the source UDF as an implicit two-point face
   flux (dosc_source, docs/formulation.md); sources now in all fluid zones incl. bulk; D_osc averaging
   loops cover exterior cells so partitions agree. uds_diff removed.
+- 2026-10-30 smoke test (job 24475471, abefc56): FULL SETUP WORKS. Diffusivities, sources in bulk+slit,
+  inlet/top velocities, UDS values on inlet/top/outlet, init, patch, init_poly_area (1000 faces, 10 um as
+  expected), phase A iterating and converging. HOOK source on all 4 nodes, but NO "HOOK flux": the UDS TUI
+  never attached uds_flux, so electromigration was off. Fix: migration moved into face_source (same
+  face loop as D_osc, central, conservative); uds_flux is now plain convection (no double count if it attaches).
 - 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
   Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
 
