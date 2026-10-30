@@ -18,7 +18,6 @@ import csv
 import glob
 import json
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -87,8 +86,13 @@ def main():
         old.unlink()
     msh = out / f"{a.case}.msh"
     p["mesh_info"] = mesh2d.main(mesh_argv(p, msh))
-    (out / "etch_params.h").write_text(header(p))
-    shutil.copy(HERE / "fluent2d" / "udf" / "etch.c", out / "etch.c")
+    (out / "etch_params.h").write_text(header(p))          # kept for reference only
+    src = (HERE / "fluent2d" / "udf" / "etch.c").read_text()
+    inc = '#include "etch_params.h"'
+    if inc not in src:
+        raise SystemExit(f"etch.c has no {inc} line to inline")
+    # Fluent copies only listed sources into libudf/src, so the parameters are inlined, not included
+    (out / "etch.c").write_text(src.replace(inc, f"/* ---- inlined etch_params.h ---- */\n{header(p)}\n"))
 
     solver = api.launch(a.procs, out)
     t0 = time.time()
@@ -110,7 +114,7 @@ def main():
                               api.setv(fl[mat].viscosity.value, P.MU_L)))
         if a.discover:                      # each step separately, so one failure doesn't hide the rest
             for label, fn in (("UDM", lambda: api.user_memory(solver, 9)),
-                              ("UDF", lambda: api.compile_load_udf(solver)),
+                              ("UDF", lambda: api.compile_load_udf(solver, out)),
                               ("UDS", lambda: api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}"))):
                 try:
                     fn()
@@ -119,7 +123,7 @@ def main():
             api.discover(solver, out / "discover.txt")
             return
         api.user_memory(solver, 9)
-        api.compile_load_udf(solver)
+        api.compile_load_udf(solver, out)
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
         api.uds_diffusivity(solver, mat, f"uds_diff::{api.UDF_LIB}", 3)
         zones = [z for z in FLUID_ZONES if z in p["mesh_info"]["cell_zones"] and z != "bulk"]

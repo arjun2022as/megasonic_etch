@@ -120,13 +120,21 @@ def discover(solver, out_file):
 
 
 # ---------------------------------------------------------------- UDF / UDS setup
-def compile_load_udf(solver):
-    first_ok("compile UDF",
-             lambda: tui(solver, f'/define/user-defined/compiled-functions compile "{UDF_LIB}" yes "etch.c" "" ""'),
-             lambda: solver.tui.define.user_defined.compiled_functions("compile", UDF_LIB, "yes", "etch.c", "", ""))
-    first_ok("load UDF",
-             lambda: tui(solver, f'/define/user-defined/compiled-functions load "{UDF_LIB}"'),
-             lambda: solver.tui.define.user_defined.compiled_functions("load", UDF_LIB))
+def compile_load_udf(solver, workdir):
+    """etch.c must be self-contained: Fluent copies only the listed files into libudf/src. Fluent prints
+    compile/load errors instead of raising them, so success is judged by the node library on disk."""
+    import shutil
+    from pathlib import Path
+    lib = Path(workdir) / UDF_LIB
+    shutil.rmtree(lib, ignore_errors=True)               # a stale libudf makes Fluent ask to overwrite
+    tui(solver, f'/define/user-defined/compiled-functions compile "{UDF_LIB}" yes "etch.c" "" ""')
+    so = sorted(str(p.relative_to(lib)) for p in lib.glob("lnamd64/*/libudf.so")) if lib.exists() else []
+    log("compiled libraries:", so or "none")
+    if not any("2ddp_node" in p for p in so):
+        raise RuntimeError(f"UDF compile failed: no {UDF_LIB}/lnamd64/2ddp_node/libudf.so "
+                           f"(compiler messages are in the job .out above and in transcript.txt)")
+    tui(solver, f'/define/user-defined/compiled-functions load "{UDF_LIB}"')
+    log("load UDF: ok")
 
 
 def user_memory(solver, n):
