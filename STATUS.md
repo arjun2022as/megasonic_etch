@@ -33,6 +33,12 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
   expected), phase A iterating and converging. HOOK source on all 4 nodes, but NO "HOOK flux": the UDS TUI
   never attached uds_flux, so electromigration was off. Fix: migration moved into face_source (same
   face loop as D_osc, central, conservative); uds_flux is now plain convection (no double count if it attaches).
+- 2026-10-30 smoke test PASSED end to end (job 24475531, 9d31c10): phase A + B, dump/report, case written.
+  HOOK source uds-0/1/2 on all 4 nodes. After only 0.0022 s (2 steps per stage, not quasi-steady):
+  top 295.1 nm/min (1D 294.6), bottom 293.3, bottom/top 0.994 falling with time (1D 0.954).
+  REPORT_OSC (45 deg, 1 MHz, 2 W/cm2, only 4 averaging steps so undersampled): D_osc_max 2.4e-10 m2/s
+  = 2 % of D_OH 1.12e-8; mean speed max 0.124 m/s. Outlet has a benign recirculation (20 faces reversed).
+  Next: full M0_none, compare bottom/top with 1D 0.954.
 - 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
   Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
 
