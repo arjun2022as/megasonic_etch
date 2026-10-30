@@ -161,6 +161,26 @@ def user_scalars(solver, n, flux_fn):
              lambda: tui(solver, "/define/user-defined/user-defined-scalars " + " ".join(seq)))
 
 
+def describe_children(obj):
+    """{child: (is_active, allowed values or None)} without writing anything."""
+    out = {}
+    for name in getattr(obj, "child_names", []) or []:
+        try:
+            child = getattr(obj, name)
+        except Exception:  # noqa: BLE001
+            continue
+        try:
+            active = bool(child.is_active())
+        except Exception:  # noqa: BLE001
+            active = None
+        try:
+            allowed = list(child.allowed_values()) if active else None
+        except Exception:  # noqa: BLE001
+            allowed = None
+        out[name] = (active, allowed)
+    return out
+
+
 def uds_diffusivity(solver, material, fn, n):
     """2024 R1 (from --discover): uds_diffusivity.option allows only 'defined-per-uds'; each
     uds_diffusivities['uds-i'] then takes its own option + user_defined_function."""
@@ -175,11 +195,27 @@ def uds_diffusivity(solver, material, fn, n):
         except Exception as e:  # noqa: BLE001
             allowed = f"? ({e})"
         log(f"uds-{i} diffusivity options: {allowed}; state before: {d.get_state()}")
-        # separate set_state calls left user_defined_function inactive on 24.1, so set both together
-        first_ok(f"uds-{i} diffusivity = {fn}",
-                 *[lambda d=d, o=o: setv(d, {"option": o, "user_defined_function": fn})
-                   for o in ("user-defined", "user_defined_function", "udf")],
-                 lambda d=d: (setv(d.option, "user-defined"), setv(d.user_defined_function, fn)))
+        # 24.1: writing an inactive child in a dict set_state SIGSEGVs host + all nodes (Puma 2026-10-30),
+        # so set the option alone, then write only a child that Fluent reports active
+        setv(d.option, option(d.option, "user-defined"))
+        log(f"uds-{i} state after option: {d.get_state()}")
+        info, target = describe_children(d), None
+        log(f"uds-{i} children: {info}")
+        for name, (active, allowed_fns) in info.items():
+            if active and name != "option" and ("user_defined" in name or "function" in name or "udf" in name):
+                target = name
+                break
+        if target is None:
+            raise RuntimeError(f"uds-{i}: no active user-defined-function child after option 'user-defined'; "
+                               f"state {d.get_state()}; children {info}")
+        allowed_fns = info[target][1]
+        val = fn
+        if isinstance(allowed_fns, list) and allowed_fns and fn not in allowed_fns:
+            close = [a for a in allowed_fns if "uds_diff" in str(a)]
+            if not close:
+                raise RuntimeError(f"uds-{i}: {fn} not offered for {target}; offered {allowed_fns}")
+            val = close[0]
+        setv(getattr(d, target), val)
         log(f"uds-{i} diffusivity state after: {d.get_state()}")
     log(f"UDS diffusivity {fn} on uds-0..{n - 1}: ok")
 
