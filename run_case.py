@@ -125,6 +125,8 @@ def main():
         api.user_memory(solver, 9)
         api.compile_load_udf(solver, out)
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
+        # allocate UDM/UDS storage before the UDF hooks are attached (Fluent calls them at once)
+        api.first_ok("early initialization", lambda: s.solution.initialization.standard_initialize())
         api.uds_diffusivity(solver, mat, f"uds_diff::{api.UDF_LIB}", 3)
         zones = [z for z in FLUID_ZONES if z in p["mesh_info"]["cell_zones"] and z != "bulk"]
         api.cell_sources(solver, zones, {0: f"src_oh::{api.UDF_LIB}", 1: f"src_sil::{api.UDF_LIB}",

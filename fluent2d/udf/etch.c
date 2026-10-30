@@ -68,6 +68,11 @@ static real drate_si(real c_oh)
 
 static real cell_c(cell_t c, Thread *t, int i) { return RHO * C_UDSI(c, t, i); }
 
+/* Fluent calls property/flux/source hooks as soon as they are attached, before initialisation has
+   allocated UDM/UDS storage; reading it then kills the compute process (seen on Puma 2026-10-30) */
+#define HAS_UDM(t) NNULLP(THREAD_STORAGE(t, SV_UDM_I))
+#define HAS_UDS(t) (NNULLP(THREAD_STORAGE(t, SV_UDS_I(0))) && NNULLP(THREAD_STORAGE(t, SV_UDS_I(1))))
+
 #if !RP_HOST
 static void zero_udm(Domain *d, int first, int last)
 {
@@ -185,7 +190,7 @@ DEFINE_ON_DEMAND(accumulate_now)
 /* convective mass flux + electromigration for the ions; plain convection for H2 */
 DEFINE_UDS_FLUX(uds_flux, f, t, i)
 {
-    real flux = F_FLUX(f, t);
+    real flux = NNULLP(THREAD_STORAGE(t, SV_FLUX)) ? F_FLUX(f, t) : 0.0;
     real A[ND_ND], x0[ND_ND], x1[ND_ND], dr[ND_ND];
     real zi, Di, coh0, csi0, coh1, csi1, geo, d_oh, d_si, s_dot_a, co, cs, q;
     cell_t c0;
@@ -200,6 +205,9 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
         return flux;                                         /* nothing crosses a wall */
     c0 = F_C0(f, t);
     t0 = THREAD_T0(t);
+    if (!HAS_UDS(t0) || (!BOUNDARY_FACE_THREAD_P(t) && !HAS_UDS(THREAD_T1(t))) ||
+        (BOUNDARY_FACE_THREAD_P(t) && !HAS_UDS(t)))
+        return flux;                                         /* called before initialisation */
     C_CENTROID(x0, c0, t0);
     coh0 = cell_c(c0, t0, 0);
     csi0 = cell_c(c0, t0, 1);
@@ -234,13 +242,16 @@ DEFINE_DIFFUSIVITY(uds_diff, c, t, i)
 {
     real d = (i == 0) ? D_OH : (i == 1) ? D_SIL : D_H2;
     hook_seen("diffusivity", i);
+    if (!HAS_UDM(t))
+        return RHO * d;                                      /* called before initialisation */
     return RHO * (d + C_UDMI(c, t, UDM_DOSC));               /* Gamma = rho D because phi = c / rho */
 }
 
 static real src(cell_t c, Thread *t, real nu, real dS[], int eqn, int implicit)
 {
-    real av = C_UDMI(c, t, UDM_AV), c_oh;
+    real av, c_oh;
     hook_seen("source", nu < 0.0 ? 0 : nu < 1.5 ? 1 : 2);   /* OH- -2, silicate +1, H2 +2 */
+    av = (HAS_UDM(t) && HAS_UDS(t)) ? C_UDMI(c, t, UDM_AV) : 0.0;   /* 0 before initialisation */
     if (av <= 0.0)
     {
         dS[eqn] = 0.0;
