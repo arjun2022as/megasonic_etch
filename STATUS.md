@@ -3,10 +3,20 @@
 Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), alternating SiO2/poly-Si
 50/50 nm, single-wafer spin tool with MegPie transducer. Formulas and sources: `docs/formulation.md`.
 
-## Next step
-- Puma: smoke test `bash submit_cases.sh A_f1_I2_t45 --setup-only` until it finishes cleanly, then a full
-  M0_none run (no megasonics) to compare with the 1D model (bottom/top 0.96), then the rest.
-- Then all 16 cases (`bash submit_cases.sh .`), then `analyze_2d.py`.
+## Next steps (agreed with user 2026-10-30, in this order)
+| # | Step | Check |
+|---|---|---|
+| 1 | Full `M0_none` (no megasonics), `bash submit_cases.sh M0_none` | bottom/top ~ 0.954 (1D) |
+| 2 | Contour/movie script like 3d_nand `make_movies`: contours of OH-, silicate, H2, velocity, D_osc, etch rate along the slit, per case, from `<case>-final.cas.h5` | PNGs per case |
+| 3 | FLAT WAFER first (normal incidence, how tools normally run): frequency 1/2/3 MHz x power 0.5/1/2 W/cm2 at 90 deg | case-by-case results |
+| 4 | Then the ANGLE cases (A_*, F_*, P_* at 45 deg, R_*), then V_* checks | every case `done:` |
+| 5 | `analyze_2d.py` figures + verification.md | 2D vs 1D |
+
+Step 3 caveat: in the current model 90 deg gives u_t = 0, so A_f1_I2_t90 is IDENTICAL to M0_none (same
+c_surf, same 1D 0.9575). A normal-incidence mechanism must be added first (candidates: acoustic
+(Eckart) streaming thinning the wafer boundary layer -> mouth concentrations; compressional "breathing"
+of the slit, xi = L|1+R|p0/(rho c^2), already in etchsim/acoustics.py), then flat-wafer cases added.
+Every figure/summary: imposed oscillating flow + modelled mixing, NOT a full acoustic-streaming solution.
 
 ## Log
 - 2026-10-30: --discover ran on Puma, discover.txt read. Fluent 2024R1 paths coded in api.py (f5af647):
