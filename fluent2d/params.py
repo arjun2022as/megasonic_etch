@@ -51,7 +51,20 @@ def surface_concentrations(extra_mixing, er_ref, order, migration):
     return res["surf"], res
 
 
-def plan(row):
+ONE_D_COLS = ("c_oh_surf", "c_sil_surf", "c_h2_surf", "one_d_er_top", "one_d_er_bottom", "one_d_uniformity",
+              "one_d_oh_min")
+
+
+def one_d_reference(row):
+    """1D mouth concentrations and reference result for a case (needs scipy: run locally by make_cases.py,
+    stored in cases.csv so the cluster does not need scipy)."""
+    p = plan(row, need_1d=True)
+    return {"c_oh_surf": p["c_surf"]["OH"], "c_sil_surf": p["c_surf"]["SIL"], "c_h2_surf": p["c_surf"]["H2"],
+            "one_d_er_top": p["one_d"]["er_top"], "one_d_er_bottom": p["one_d"]["er_bottom"],
+            "one_d_uniformity": p["one_d"]["uniformity"], "one_d_oh_min": p["one_d"]["oh_min"]}
+
+
+def plan(row, need_1d=False):
     f = _f(row, "f_MHz", 0.0) * 1e6
     I = _f(row, "I_W_cm2", 0.0)
     theta = _f(row, "theta_deg", 90.0)
@@ -70,7 +83,12 @@ def plan(row):
         o, u_t, delta, omega = None, 0.0, 1.0, 1.0
     osc = u_t > 1e-9
     extra = u_t ** 2 / (2 * omega) if osc else 0.0
-    surf, res1d = surface_concentrations(extra, er_ref, order, bool(migration))
+    if not need_1d and all(row.get(k) not in (None, "") for k in ONE_D_COLS):     # precomputed in cases.csv
+        surf = {"OH": float(row["c_oh_surf"]), "SIL": float(row["c_sil_surf"]), "H2": float(row["c_h2_surf"])}
+        res1d = {"er_top": float(row["one_d_er_top"]), "er_bottom": float(row["one_d_er_bottom"]),
+                 "uniformity": float(row["one_d_uniformity"]), "oh_min": float(row["one_d_oh_min"])}
+    else:
+        surf, res1d = surface_concentrations(extra, er_ref, order, bool(migration))
     p = dict(case=row["case"], f=f, I=I, theta=theta, recess=recess, refine=refine, order=order,
              er_ref=er_ref, migration=migration, osc_scale=osc_scale, G=G, gap=GAP, u_t=u_t, delta=delta,
              omega=omega, oscillating=osc, c_surf=surf, rho=P.RHO_L, mu=P.MU_L,

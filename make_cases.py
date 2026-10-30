@@ -39,7 +39,11 @@ def rows():
 
 
 if __name__ == "__main__":
+    from fluent2d.params import ONE_D_COLS, one_d_reference
+    COLS += list(ONE_D_COLS)
     rs = rows()
+    for r in rs:                     # 1D mouth concentrations + reference, so Puma needs no scipy
+        r.update({k: f"{v:.10g}" for k, v in one_d_reference(r).items()})
     with open(Path(__file__).resolve().parent / "cases.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=COLS, lineterminator="\n")
         w.writeheader()
