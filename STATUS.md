@@ -20,6 +20,10 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
   moved off the macro line (57094dd; udf_names.c generator copies the rest of that line). UDS TUI prints
   "You must select one of the solution zones!" but ends with "Solution zones:(2 3)" for all 3 scalars;
   etch.c now prints "HOOK <flux|diffusivity|source> uds-i active" on first call to prove each hookup.
+- 2026-10-30 smoke tests (A_f1_I2_t45 --setup-only): mesh, UDM, compile/load, 3 UDS, early init all ok.
+  uds-0 diffusivity: option 'user-defined' is allowed, but then `user_defined_function` reported "not
+  active"; writing {"option","user_defined_function"} together SIGSEGV'd host + all nodes (Fluent itself,
+  not our UDF). 2eeeb25: set option alone, log state + active children, write only an active child.
 - 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
   Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
 
