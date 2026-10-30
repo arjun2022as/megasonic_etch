@@ -20,7 +20,7 @@
  *
  * Megasonic mixing: while the oscillating flow runs, accumulate_now (called after every time step by
  * run_case.py) sums u, v, u^2, v^2; finish_avg sets D_osc = OSC_SCALE (var_u + var_v) / OMEGA, i.e. |u1|^2 / (2 omega) for a
- * sinusoidal oscillation (upper bound of oscillatory dispersion), used afterwards in uds_diff.
+ * sinusoidal oscillation (upper bound of oscillatory dispersion), used afterwards in dosc_source (interior + exterior cells, so both sides of a partition agree).
  *
  * UDM: 0 poly length/cell area  1-4 sums u, v, uu, vv  5 D_osc  6 mean speed  7 etch rate [m/s]  8 samples
  */
@@ -81,12 +81,12 @@ static void zero_udm(Domain *d, int first, int last)
     int k;
     thread_loop_c(t, d)
     {
-        begin_c_loop(c, t)
+        begin_c_loop_all(c, t)
         {
             for (k = first; k <= last; k++)
                 C_UDMI(c, t, k) = 0.0;
         }
-        end_c_loop(c, t)
+        end_c_loop_all(c, t)
     }
 }
 #endif
@@ -140,7 +140,7 @@ DEFINE_ON_DEMAND(finish_avg)
     accumulating = 0;
     thread_loop_c(t, d)
     {
-        begin_c_loop(c, t)
+        begin_c_loop_all(c, t)
         {
             real n = C_UDMI(c, t, UDM_N);
             if (n > 0.5)
@@ -154,7 +154,7 @@ DEFINE_ON_DEMAND(finish_avg)
                 umax = MAX(umax, C_UDMI(c, t, UDM_UMEAN));
             }
         }
-        end_c_loop(c, t)
+        end_c_loop_all(c, t)
     }
     dmax = PRF_GRHIGH1(dmax);
     umax = PRF_GRHIGH1(umax);
@@ -173,7 +173,7 @@ DEFINE_ON_DEMAND(accumulate_now)
         return;
     thread_loop_c(t, d)
     {
-        begin_c_loop(c, t)
+        begin_c_loop_all(c, t)
         {
             real u = C_U(c, t), v = C_V(c, t);
             C_UDMI(c, t, UDM_SU) += u;
@@ -182,7 +182,7 @@ DEFINE_ON_DEMAND(accumulate_now)
             C_UDMI(c, t, UDM_SVV) += v * v;
             C_UDMI(c, t, UDM_N) += 1.0;
         }
-        end_c_loop(c, t)
+        end_c_loop_all(c, t)
     }
 #endif
 }
@@ -238,44 +238,81 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
     return flux + RHO * zi * Di * s_dot_a / q;               /* + rho (z D S/Q) . A */
 }
 
-DEFINE_DIFFUSIVITY(uds_diff, c, t, i)
+
+/* Megasonic mixing div(rho D_osc grad phi_i) as a cell source, because Fluent 24.1's settings API leaves
+ * the per-UDS user-defined diffusivity field inactive (molecular rho D_i is set as a constant instead).
+ * Two-point face flux k_f (phi_nb - phi_c), k_f = rho D_osc,f A.A / |A.dr| (exact on this orthogonal
+ * mesh), D_osc,f = mean of the two cells; implicit part -sum k_f goes to dS. Interior faces only:
+ * ASSUMED no D_osc flux through inlet/outlet/top boundaries (they are far from the slit). */
+static real dosc_source(cell_t c, Thread *t, int i, real *dsdphi)
 {
-    real d = (i == 0) ? D_OH : (i == 1) ? D_SIL : D_H2;
-    hook_seen("diffusivity", i);
-    if (!HAS_UDM(t))
-        return RHO * d;                                      /* called before initialisation */
-    return RHO * (d + C_UDMI(c, t, UDM_DOSC));               /* Gamma = rho D because phi = c / rho */
+    int n;
+    real s = 0.0, kk = 0.0, dc = C_UDMI(c, t, UDM_DOSC), xc[ND_ND];
+    *dsdphi = 0.0;
+    C_CENTROID(xc, c, t);
+    c_face_loop(c, t, n)
+    {
+        face_t f = C_FACE(c, t, n);
+        Thread *tf = C_FACE_THREAD(c, t, n);
+        cell_t cn;
+        Thread *tn;
+        real A[ND_ND], xn[ND_ND], dr[ND_ND], dn, k;
+        if (BOUNDARY_FACE_THREAD_P(tf))
+            continue;
+        if (F_C0(f, tf) == c && THREAD_T0(tf) == t) { cn = F_C1(f, tf); tn = THREAD_T1(tf); }
+        else { cn = F_C0(f, tf); tn = THREAD_T0(tf); }
+        if (!HAS_UDM(tn) || !HAS_UDS(tn))
+            continue;
+        dn = C_UDMI(cn, tn, UDM_DOSC);
+        if (dc <= 0.0 && dn <= 0.0)
+            continue;
+        F_AREA(A, f, tf);
+        C_CENTROID(xn, cn, tn);
+        NV_VV(dr, =, xn, -, xc);
+        k = RHO * 0.5 * (dc + dn) * NV_DOT(A, A) / fabs(NV_DOT(A, dr));
+        s += k * (C_UDSI(cn, tn, i) - C_UDSI(c, t, i));
+        kk += k;
+    }
+    *dsdphi = -kk / C_VOLUME(c, t);
+    return s / C_VOLUME(c, t);
 }
 
-static real src(cell_t c, Thread *t, real nu, real dS[], int eqn, int implicit)
+/* i: UDS index; nu: stoichiometric coefficient per Si (OH- -2, silicate +1, H2 +2) */
+static real src(cell_t c, Thread *t, int i, real nu, real dS[], int eqn, int implicit)
 {
-    real av, c_oh;
-    hook_seen("source", nu < 0.0 ? 0 : nu < 1.5 ? 1 : 2);   /* OH- -2, silicate +1, H2 +2 */
-    av = (HAS_UDM(t) && HAS_UDS(t)) ? C_UDMI(c, t, UDM_AV) : 0.0;   /* 0 before initialisation */
-    if (av <= 0.0)
+    real av, c_oh, s_mix, ds_mix;
+    hook_seen("source", i);
+    if (!HAS_UDM(t) || !HAS_UDS(t))                          /* called before initialisation */
     {
         dS[eqn] = 0.0;
         return 0.0;
     }
+    s_mix = dosc_source(c, t, i, &ds_mix);
+    av = C_UDMI(c, t, UDM_AV);
+    if (av <= 0.0)
+    {
+        dS[eqn] = ds_mix;
+        return s_mix;
+    }
     c_oh = cell_c(c, t, 0);
-    dS[eqn] = implicit ? nu * av * drate_si(c_oh) * RHO : 0.0;   /* dS/dphi with phi = c / rho */
-    return nu * av * rate_si(c_oh);                               /* mol/m3/s = rho phi per second */
+    dS[eqn] = ds_mix + (implicit ? nu * av * drate_si(c_oh) * RHO : 0.0);   /* dS/dphi, phi = c / rho */
+    return s_mix + nu * av * rate_si(c_oh);                       /* mol/m3/s = rho phi per second */
 }
 
 /* bodies on their own lines: Fluent's udf_names.c generator copies the rest of the macro line verbatim */
 DEFINE_SOURCE(src_oh, c, t, dS, eqn)
 {
-    return src(c, t, -2.0, dS, eqn, 1);
+    return src(c, t, 0, -2.0, dS, eqn, 1);
 }
 
 DEFINE_SOURCE(src_sil, c, t, dS, eqn)
 {
-    return src(c, t, 1.0, dS, eqn, 0);
+    return src(c, t, 1, 1.0, dS, eqn, 0);
 }
 
 DEFINE_SOURCE(src_h2, c, t, dS, eqn)
 {
-    return src(c, t, 2.0, dS, eqn, 0);
+    return src(c, t, 2, 2.0, dS, eqn, 0);
 }
 
 /* every compute process writes its own cells: poly-Si wall cells and the slit/mouth centre column.

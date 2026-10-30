@@ -24,6 +24,10 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
   uds-0 diffusivity: option 'user-defined' is allowed, but then `user_defined_function` reported "not
   active"; writing {"option","user_defined_function"} together SIGSEGV'd host + all nodes (Fluent itself,
   not our UDF). 2eeeb25: set option alone, log state + active children, write only an active child.
+  Result: after option 'user-defined' ALL children inactive (24.1 settings bug). Decision: molecular rho D_i
+  as constant per-UDS diffusivity; D_osc mixing moved into the source UDF as an implicit two-point face
+  flux (dosc_source, docs/formulation.md); sources now in all fluid zones incl. bulk; D_osc averaging
+  loops cover exterior cells so partitions agree. uds_diff removed.
 - 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
   Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
 

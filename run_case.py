@@ -127,8 +127,9 @@ def main():
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
         # allocate UDM/UDS storage before the UDF hooks are attached (Fluent calls them at once)
         api.first_ok("early initialization", lambda: s.solution.initialization.standard_initialize())
-        api.uds_diffusivity(solver, mat, f"uds_diff::{api.UDF_LIB}", 3)
-        zones = [z for z in FLUID_ZONES if z in p["mesh_info"]["cell_zones"] and z != "bulk"]
+        api.uds_diffusivity(solver, mat, [P.RHO_L * P.D[k] for k in ("OH", "SIL", "H2")])
+        # sources everywhere: reaction is zero away from poly-Si, D_osc mixing acts in the bulk too
+        zones = [z for z in FLUID_ZONES if z in p["mesh_info"]["cell_zones"]]
         api.cell_sources(solver, zones, {0: f"src_oh::{api.UDF_LIB}", 1: f"src_sil::{api.UDF_LIB}",
                                          2: f"src_h2::{api.UDF_LIB}"})
         ne = s.setup.named_expressions

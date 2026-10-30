@@ -114,7 +114,7 @@ Check: a uniform liquid fraction ε reproduces the cosh solution with D → εD.
 
 **Equations (UDF `fluent2d/udf/etch.c`, constants generated into `etch_params.h`).**
 - Three user-defined scalars: φ_i = c_i/ρ for OH⁻, silicate and H₂.
-- Diffusivity: Γ = ρ(D_i + D_osc).
+- Diffusivity: Γ = ρ(D_i + D_osc). The molecular part ρD_i is a constant per-UDS diffusivity in Fluent. The D_osc part is a cell source ∇·(ρD_osc∇φ_i) = (1/V) Σ_f k_f (φ_nb − φ_c), k_f = ρ D_osc,f A·A/|A·dr|, D_osc,f = mean of the two cells, implicit part −Σk_f/V. This is the same two-point flux Fluent would use; it is needed because the 2024 R1 settings API cannot attach a per-UDS user-defined diffusivity. ASSUMED: no D_osc flux through the inlet/outlet/top boundaries, which are far from the slit.
 - Electromigration: added to the convective face flux of the two ions as ρ z_i D_i (S·A)/Q. On this orthogonal mesh S·A comes exactly from the two cell values, so the flux is the same on both sides of a parallel partition.
 - Reaction: a source term in the cells next to poly-Si faces, ν_i r × (poly length / cell area), implicit for OH⁻.
 - These are the same equations as the 1D model; `tests/test_fluent2d.py` checks the C electromigration term against `slit1d` algebraically.
