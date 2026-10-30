@@ -4,12 +4,17 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
 50/50 nm, single-wafer spin tool with MegPie transducer. Formulas and sources: `docs/formulation.md`.
 
 ## Next step
-- Puma: `cd ~ && git clone https://github.com/arjun2022as/megasonic_etch.git project1`, then
-  `cd ~/project1 && bash submit_cases.sh M0_none --discover`; send `tail -60 logs/M0_none_*.out` and
-  `results/M0_none_discover/discover.txt`. Fix the UDS/UDF hookups in `fluent2d/api.py` from it.
-- Then: smoke test `bash submit_cases.sh A_f1_I2_t45 --setup-only`, then all 16 cases, then `analyze_2d.py`.
+- Puma: `cd ~/project1 && git pull && bash submit_cases.sh A_f1_I2_t45 --setup-only` (smoke test);
+  send the log (`tail -n 100` per file; plain `tail -80` fails with two files) and fix what breaks.
+- Then all 16 cases (`bash submit_cases.sh .`), then `analyze_2d.py`.
 
 ## Log
+- 2026-10-30: --discover ran on Puma, discover.txt read. Fluent 2024R1 paths coded in api.py (f5af647):
+  no `setup.user_defined` (UDM/UDS count via TUI `/define/user-defined/...`); material is default `air`
+  (properties overwritten); `uds_diffusivity.option` only 'defined-per-uds', then per
+  `uds_diffusivities['uds-i']`; cell sources `source_terms.sources` + `source_terms.source_terms[eq]`;
+  BC keys `uds.uds_bc['User Scalar i']` ('Specified Value') and `uds.uds['User Scalar i'].value`.
+  Whether the UDF compile + UDS TUI steps succeeded is not yet confirmed (job log not seen).
 - 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
   Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
 
