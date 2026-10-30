@@ -9,6 +9,10 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
   `results/M0_none_discover/discover.txt`. Fix the UDS/UDF hookups in `fluent2d/api.py` from it.
 - Then: smoke test `bash submit_cases.sh A_f1_I2_t45 --setup-only`, then all 16 cases, then `analyze_2d.py`.
 
+## Log
+- 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
+  Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
+
 ## Decisions (user)
 - Software: Fluent 2024R1 + compiled UDFs (not COMSOL). Etchant 5 wt% TMAH, 60 C (Micron conditions pending).
 - Megasonics 1/2/3 MHz, 0.5-2 W/cm2; H2 tracked as dissolved species. Wet etch only (dry etch done before).
