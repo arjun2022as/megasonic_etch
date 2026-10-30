@@ -170,8 +170,17 @@ def uds_diffusivity(solver, material, fn, n):
     log("uds_diffusivities:", list(per.get_object_names()))
     for i in range(n):
         d = per[f"uds-{i}"]
-        setv(d.option, option(d.option, "user-defined", "user_defined_function", "udf"))
-        setv(d.user_defined_function, fn)
+        try:
+            allowed = list(d.option.allowed_values())
+        except Exception as e:  # noqa: BLE001
+            allowed = f"? ({e})"
+        log(f"uds-{i} diffusivity options: {allowed}; state before: {d.get_state()}")
+        # separate set_state calls left user_defined_function inactive on 24.1, so set both together
+        first_ok(f"uds-{i} diffusivity = {fn}",
+                 *[lambda d=d, o=o: setv(d, {"option": o, "user_defined_function": fn})
+                   for o in ("user-defined", "user_defined_function", "udf")],
+                 lambda d=d: (setv(d.option, "user-defined"), setv(d.user_defined_function, fn)))
+        log(f"uds-{i} diffusivity state after: {d.get_state()}")
     log(f"UDS diffusivity {fn} on uds-0..{n - 1}: ok")
 
 
