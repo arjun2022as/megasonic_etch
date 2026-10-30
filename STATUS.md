@@ -15,6 +15,11 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
   `uds_diffusivities['uds-i']`; cell sources `source_terms.sources` + `source_terms.source_terms[eq]`;
   BC keys `uds.uds_bc['User Scalar i']` ('Specified Value') and `uds.uds['User Scalar i'].value`.
   Whether the UDF compile + UDS TUI steps succeeded is not yet confirmed (job log not seen).
+- 2026-10-30: UDF compile fixed and confirmed on Puma (job 24474930, libudf.so linked): etch_params.h is
+  inlined into etch.c (6022e1b; Fluent copies only listed files to libudf/src) and DEFINE_SOURCE bodies
+  moved off the macro line (57094dd; udf_names.c generator copies the rest of that line). UDS TUI prints
+  "You must select one of the solution zones!" but ends with "Solution zones:(2 3)" for all 3 scalars;
+  etch.c now prints "HOOK <flux|diffusivity|source> uds-i active" on first call to prove each hookup.
 - 2026-10-31: first --discover job (24474108) failed before Fluent: no scipy in ~/venvs/pyfluent241.
   Fixed (c115fef): 1D mouth concentrations precomputed into cases.csv by make_cases.py. gcc 11.5 on nodes.
 

@@ -37,7 +37,21 @@
 #define UDM_RATE 7
 #define UDM_N 8
 
+#if !RP_HOST
 static int accumulating = 0;
+#endif
+
+/* prints once per compute process and scalar the first time Fluent calls a hooked function, so the job
+   log shows which TUI/settings hookups actually took effect */
+static void hook_seen(const char *name, int i)
+{
+    static int seen[4][3];
+    int k = name[0] == 'f' ? 0 : name[0] == 'd' ? 1 : 2;
+    if (i < 0 || i > 2 || seen[k][i])
+        return;
+    seen[k][i] = 1;
+    Message("HOOK %s uds-%d active on node %d\n", name, i, myid);
+}
 
 static real rate_si(real c_oh)
 {
@@ -176,6 +190,7 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
     real zi, Di, coh0, csi0, coh1, csi1, geo, d_oh, d_si, s_dot_a, co, cs, q;
     cell_t c0;
     Thread *t0;
+    hook_seen("flux", i);
     if (i == 0) { zi = -1.0; Di = D_OH; }
     else if (i == 1) { zi = -2.0; Di = D_SIL; }
     else return flux;
@@ -218,12 +233,14 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
 DEFINE_DIFFUSIVITY(uds_diff, c, t, i)
 {
     real d = (i == 0) ? D_OH : (i == 1) ? D_SIL : D_H2;
+    hook_seen("diffusivity", i);
     return RHO * (d + C_UDMI(c, t, UDM_DOSC));               /* Gamma = rho D because phi = c / rho */
 }
 
 static real src(cell_t c, Thread *t, real nu, real dS[], int eqn, int implicit)
 {
     real av = C_UDMI(c, t, UDM_AV), c_oh;
+    hook_seen("source", nu < 0.0 ? 0 : nu < 1.5 ? 1 : 2);   /* OH- -2, silicate +1, H2 +2 */
     if (av <= 0.0)
     {
         dS[eqn] = 0.0;
