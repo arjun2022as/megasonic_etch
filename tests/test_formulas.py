@@ -177,6 +177,45 @@ def test_independent_bvp_solver_with_migration():
     assert np.max(np.abs(res["c"]["SIL"] - ref[1])) / P.C_BULK < 3e-3
 
 
+def test_pocket_linear_front_matches_full_integration():
+    from etchsim.pocket import front, h_vector
+    s = Slit(n=10)
+    c_oh, c_sil, R = np.array([500.0, 300.0]), np.array([10.0, 60.0]), np.array([1e-6, 1e-6])
+    lin = front(c_oh, c_sil, np.zeros(2), R, s.rate)
+    for k in range(2):                       # RK4 along the pocket with the front rate from the linear model
+        r, y, nst = lin["r"][k], np.array([c_oh[k], c_sil[k]]), 2000
+        dx = R[k] / nst
+        for _ in range(nst):
+            def f(v):
+                return r * np.array(h_vector(v[0], v[1]))
+            k1 = f(y)
+            k2 = f(y + dx / 2 * k1)
+            k3 = f(y + dx / 2 * k2)
+            k4 = f(y + dx * k3)
+            y = y + dx / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        assert c_oh[k] - y[0] == pytest.approx(c_oh[k] - lin["c_oh"][k], rel=1e-2)   # drop along pocket
+        assert y[1] - c_sil[k] == pytest.approx(lin["c_sil"][k] - c_sil[k], rel=1e-2)
+        assert y[0] == pytest.approx(lin["c_oh"][k], rel=1e-6)
+    assert np.allclose(front(c_oh, c_sil, np.zeros(2), np.zeros(2), s.rate)["r"], s.rate(c_oh))   # R = 0
+
+
+def test_bubble_criterion_by_hand():
+    from etchsim.pocket import s_crit
+    assert s_crit() == pytest.approx((101325 + 2 * 0.0662 / 100e-9 - 19946) / 101325)
+    assert 13 < s_crit() < 15
+
+
+def test_liquid_fraction_matches_cosh_with_reduced_area():
+    er, eps = 3e-9 / 60, 0.4
+    s = Slit(n=1000, order=1.0, er_ref=er, poly=np.ones(1000), migration=False)
+    s.liquid[:] = eps
+    res = s.solve()
+    k = P.si_flux(er) / P.C_BULK
+    m = math.sqrt(4 * k / (P.W_SLIT * P.D["OH"] * eps))
+    exact = P.C_BULK * np.cosh(m * (P.L_SLIT - s.zc)) / math.cosh(m * P.L_SLIT)
+    assert np.max(np.abs(res["c"]["OH"] - exact)) / P.C_BULK < 2e-3
+
+
 def test_grid_convergence_layered():
     a = Slit(n=1000).solve()
     b = Slit(n=2000).solve()

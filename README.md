@@ -8,8 +8,10 @@ along a 100 nm × 10 µm slit, with a 1–3 MHz megasonic field in a single-wafe
 - `etchsim/props.py`: conditions and properties (ASSUMED values marked)
 - `etchsim/acoustics.py`: megasonic field at the wafer and in the slit (reflection from Si, Stokes layer, decay)
 - `etchsim/slit1d.py`: quasi-steady 1D Nernst–Planck (diffusion + electromigration) + sidewall reaction
+- `etchsim/pocket.py`: lateral recess pockets, H₂ bubble criterion
 - `run_1d.py`: reference study, writes `results_1d/` (profiles.png, megasonic_effect.png, summary.csv)
-- `tests/test_formulas.py`: independent checks (17)
+- `run_evolution.py`: recess growth over 2 min, H₂ bubble-blocking scenarios, acoustic vs Laplace pressure
+- `tests/test_formulas.py`: independent checks (20)
 
 ```bash
 uv run --no-project --with numpy --with scipy --with matplotlib python run_1d.py

@@ -46,6 +46,15 @@ class Slit:
         self.km = km                                          # {species: k} or None = surface at bulk
         self.pitch, self.migration = pitch, migration
         self.bulk = {"OH": c_bulk, "SIL": 0.0, "H2": 0.0}
+        self.recess = np.zeros(n)          # lateral recess depth of the poly-Si at each cell [m]
+        self.liquid = np.ones(n + 1)       # liquid fraction of the slit cross-section at each face (bubbles)
+
+    def wall(self, c):
+        """Front reaction rate and front concentrations at every cell (pockets of depth self.recess)."""
+        from .pocket import front
+        if not self.recess.any():
+            return dict(r=self.rate(c["OH"]), c_oh=c["OH"], c_sil=c["SIL"], c_h2=c["H2"])
+        return front(c["OH"], c["SIL"], c["H2"], self.recess, self.rate)
 
     # ------------------------------------------------------------ physics
     EPS = 1e-6        # numerical cut-off: below 1e-6 c_bulk the rate goes to zero smoothly (c^n has an
@@ -76,6 +85,7 @@ class Slit:
         N = {}
         for s in SPECIES:
             N[s] = -(self.D[s] + self.dosc_f) * grad[s] + P.Z[s] * self.D[s] * mid[s] * ratio
+            N[s] *= self.liquid                  # flux per slit cross-section; bubbles take part of it
             N[s][-1] = 0.0
         return N, ratio
 
@@ -92,7 +102,7 @@ class Slit:
     def residual(self, x, surf):
         c = self._unpack(x)
         N, _ = self.fluxes(c, surf)
-        r = self.rate(c["OH"]) * 2 * self.poly / self.W
+        r = self.wall(c)["r"] * 2 * self.poly / self.W
         res = [(np.diff(N[s]) / self.dz) - P.NU_RXN[s] * r for s in SPECIES]
         return np.concatenate(res)
 
@@ -100,12 +110,17 @@ class Slit:
     def _unpack(self, x):
         return {s: x[k * self.n:(k + 1) * self.n] for k, s in enumerate(SPECIES)}
 
-    def solve(self, tol=1e-10, max_newton=200, outer=30):
+    def solve(self, tol=1e-10, max_newton=200, outer=30, guess=None):
         from scipy.sparse import csc_matrix
         from scipy.sparse.linalg import spsolve
         n = self.n
-        x = np.concatenate([np.full(n, self.cb), np.zeros(n), np.zeros(n)])
-        surf = dict(self.bulk)
+        if guess is not None:                                     # warm start (time stepping)
+            x, surf = guess
+            x = x.copy()
+            surf = dict(surf)
+        else:
+            x = np.concatenate([np.full(n, self.cb), np.zeros(n), np.zeros(n)])
+            surf = dict(self.bulk)
         for _ in range(outer):                                   # outer loop: wafer boundary layer
             for it in range(max_newton):
                 F0 = self.residual(x, surf)
@@ -155,16 +170,19 @@ class Slit:
     def result(self):
         c = self._unpack(self.x)
         N, ratio = self.fluxes(c, self.surf)
-        er = self.rate(c["OH"]) / P.si_flux(1.0)                          # etch velocity, m/s
+        w = self.wall(c)
+        er = w["r"] / P.si_flux(1.0)                                      # etch velocity at the front, m/s
         poly = self.poly > 0
         z_poly, er_poly = self.zc[poly], er[poly]
         top = er_poly[: max(1, int(0.05 * len(er_poly)))].mean()        # top 5 % of poly layers
         bot = er_poly[-max(1, int(0.05 * len(er_poly))):].mean()        # bottom 5 %
-        consumed = (self.rate(c["OH"]) * 2 * self.poly).sum() * self.dz  # mol Si / s per m of slit length
+        consumed = (w["r"] * 2 * self.poly).sum() * self.dz             # mol Si / s per m of slit length
+        h2 = np.where(self.poly > 0, w["c_h2"], c["H2"])                  # H2 is highest at the etch front
         return dict(z=self.zc, c=c, N=N, er=er, surf=self.surf, er_top=top, er_bottom=bot,
                     uniformity=bot / top if top > 0 else float("nan"), er_mean=er_poly.mean(),
-                    phi_grad_ratio=ratio, si_consumed=consumed, h2_supersat=c["H2"].max() / P.H2_SAT,
-                    oh_min=c["OH"].min(), sil_max=c["SIL"].max(), z_poly=z_poly, er_poly=er_poly)
+                    phi_grad_ratio=ratio, si_consumed=consumed, h2_supersat=h2.max() / P.H2_SAT,
+                    S_h2=h2 / P.H2_SAT, oh_min=c["OH"].min(), sil_max=c["SIL"].max(),
+                    z_poly=z_poly, er_poly=er_poly, front=w)
 
 
 def thiele(order=P.ORDER_OH, W=P.W_SLIT, L=P.L_SLIT, d=None, poly_fraction=0.5):

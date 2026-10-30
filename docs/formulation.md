@@ -84,6 +84,26 @@ L²/D ≪ the minutes the etch front takes to move.
 
 **Not modelled:** cavitation, bubble microstreaming, Eckart bulk streaming (estimated 10⁻⁴–10⁻³ m/s in a mm-scale gap, below the spin-film flow), and H₂ bubble nucleation (reported as dissolved-H₂ supersaturation instead).
 
-## 6. Stage 2 (Fluent 2D, UDFs), planned
+## 6. Recess growth and H₂ bubbles (`etchsim/pocket.py`, `run_evolution.py`)
+
+**Pockets.** An etched poly-Si layer leaves a pocket of depth R and height 50 nm, with oxide walls and the etch front at its end. Inside the pocket the fluxes are constant: N_OH = 2r inward, N_SIL = r and N_H₂ = 2r outward. With the same zero-current Nernst–Planck algebra, the gradients are r·h(c), where h comes from a 2×2 linear system. The concentration change over the pocket is about 10⁻³ of bulk even for R = 1 µm, so
+
+  c_front = c_mouth − r R h(c_mouth),  r = rate(c_OH,front),  c_H₂,front = c_H₂,mouth + 2rR/D_H₂.
+
+Check: this matches a full RK4 integration along the pocket to within 1 % of the concentration drop and 10⁻⁶ of the concentration.
+Time stepping: quasi-steady at each time; the recess advances by the front etch velocity with explicit dt = 5 s.
+
+**Bubble criterion.** A bubble that fills the slit width has a meniscus with one curvature 2/W (wetting oxide):
+
+  S_crit = (p_atm + 2γ/W − p_vap)/p_atm = 13.9 for W = 100 nm (γ = 0.0662 N/m, p_vap = 19.9 kPa at 60 °C)
+
+Where the dissolved-H₂ supersaturation S > S_crit, confined bubbles can grow (check: recomputed by hand).
+
+**Bubble blocking, a parametric scenario.** No bubble dynamics are solved. Where S > S_crit, bubbles take a fraction α of the slit cross-section: the transport area shrinks and the walls stay wetted. α is swept from 0 to 0.9 and the bubble region is found self-consistently.
+Check: a uniform liquid fraction ε reproduces the cosh solution with D → εD.
+
+**Indicator for megasonic action on confined bubbles:** the pressure amplitude at the wafer, |1+R|p₀, compared with the Laplace pressure 2γ/W = 1.32 MPa.
+
+## 7. Stage 2 (Fluent 2D, UDFs), planned
 
 The 2D model resolves the mouth region: the oscillating Stokes flow over the slit, the steady spin shear, and the lateral recess pockets as the etch advances. It uses user-defined scalars for OH⁻, silicate and H₂ with the same Nernst–Planck / zero-current flux (DEFINE_UDS_FLUX) and a reaction-flux wall condition on poly-Si faces only. The 1D model is its reference.
