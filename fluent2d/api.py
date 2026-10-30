@@ -153,51 +153,62 @@ def user_scalars(solver, n, flux_fn):
              lambda: tui(solver, "/define/user-defined/user-defined-scalars " + " ".join(seq)))
 
 
-def uds_diffusivity(solver, material, fn):
-    s = settings(solver)
-    m = s.setup.materials.fluid[material]
-    log(f"material {material} properties:", getattr(m, "child_names", "?"))
+def uds_diffusivity(solver, material, fn, n):
+    """2024 R1 (from --discover): uds_diffusivity.option allows only 'defined-per-uds'; each
+    uds_diffusivities['uds-i'] then takes its own option + user_defined_function."""
+    ud = settings(solver).setup.materials.fluid[material].uds_diffusivity
+    setv(ud.option, option(ud.option, "defined-per-uds"))
+    per = ud.uds_diffusivities
+    log("uds_diffusivities:", list(per.get_object_names()))
+    for i in range(n):
+        d = per[f"uds-{i}"]
+        setv(d.option, option(d.option, "user-defined", "user_defined_function", "udf"))
+        setv(d.user_defined_function, fn)
+    log(f"UDS diffusivity {fn} on uds-0..{n - 1}: ok")
 
-    def via_settings():
-        ud = pick(m, "uds_diffusivity", "user_defined_scalar_diffusivity")
-        log("uds_diffusivity:", getattr(ud, "child_names", "?"))
-        setv(pick(ud, "option"), "user-defined")
-        setv(pick(ud, "user_defined_function", "function", "udf"), fn)
-    first_ok(f"UDS diffusivity {fn}", via_settings)
+
+def source_key(names, i):
+    for k in (f"uds-{i}", f"user-scalar-{i}", f"User Scalar {i}", f"uds{i}", f"scalar-{i}"):
+        if k in names:
+            return k
+    hits = [k for k in names if k.endswith(str(i)) and ("uds" in k.lower() or "scalar" in k.lower())]
+    if len(hits) == 1:
+        return hits[0]
+    raise KeyError(f"no source entry for UDS {i}; entries: {names}")
 
 
 def cell_sources(solver, zones, terms):
-    """terms: {uds index: udf name}."""
+    """terms: {uds index: udf name}. 2024 R1: fluid[z].source_terms.sources is the on/off switch and
+    source_terms.source_terms[<equation>] is a list of {option, value, ..., udf} (from --discover)."""
     s = settings(solver)
     for z in zones:
-        fz = s.setup.cell_zone_conditions.fluid[z]
-        log(f"cell zone {z}:", getattr(fz, "child_names", "?"))
-
-        def via_settings(fz=fz):
-            src = pick(fz, "sources", "source_terms")
-            log("sources:", getattr(src, "child_names", "?"))
-            setv(pick(src, "enable", "enabled", "sources"), True)
-            st = pick(src, "terms", "source_terms")
-            state = {f"uds-{i}": [{"option": "udf", "udf": f}] for i, f in terms.items()}
-            setv(st, state)
-        first_ok(f"sources in {z}", via_settings)
+        st = s.setup.cell_zone_conditions.fluid[z].source_terms
+        setv(st.sources, True)
+        tab = st.source_terms
+        names = list(tab.get_object_names())
+        log(f"cell zone {z} source entries:", names)
+        for i, f in terms.items():
+            k = source_key(names, i)
+            log(f"  {k} before:", tab[k].get_state())
+            first_ok(f"source {k} = {f} in {z}",
+                     *[lambda k=k, f=f, o=o: setv(tab[k], [{"option": o, "udf": f}])
+                       for o in ("udf", "user-defined", "UDF")])
 
 
 def uds_values(solver, kind, name, values):
-    """Specified UDS values (phi = c / rho) on a boundary."""
-    s = settings(solver)
-    bc = getattr(s.setup.boundary_conditions, kind)[name]
-    log(f"{kind} {name}:", getattr(bc, "child_names", "?"))
-
-    def via_settings():
-        u = pick(bc, "uds", "user_defined_scalars")
-        log("uds group:", getattr(u, "child_names", "?"))
-        kinds, vals = pick(u, "uds_bc"), pick(u, "uds")        # per-scalar BC type and value/flux
-        for i, v in enumerate(values):
-            key = f"uds-{i}"
-            setv(kinds[key], option_or(kinds[key], "Specified Value", "specified-value", "value"))
-            setv(vals[key], v)
-    first_ok(f"UDS values on {name}", via_settings)
+    """Specified UDS values (phi = c / rho) on a boundary. 2024 R1 (from --discover): keys 'User Scalar i';
+    uds_bc[key] is 'Specified Value' / 'Specified Flux'; uds[key] has option, value, profile_name, udf."""
+    u = getattr(settings(solver).setup.boundary_conditions, kind)[name].uds
+    for i, v in enumerate(values):
+        key = f"User Scalar {i}"
+        setv(u.uds_bc[key], option(u.uds_bc[key], "Specified Value"))
+        val = u.uds[key]
+        try:
+            setv(val.option, option(val.option, "value", "constant"))
+        except Exception as e:  # noqa: BLE001
+            log(f"  {name} {key}: option left as is ({e})")
+        setv(val.value, v)
+    log(f"UDS values on {name}: ok")
 
 
 def option_or(obj, *cands):

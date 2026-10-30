@@ -121,7 +121,7 @@ def main():
         api.user_memory(solver, 9)
         api.compile_load_udf(solver)
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
-        api.uds_diffusivity(solver, mat, f"uds_diff::{api.UDF_LIB}")
+        api.uds_diffusivity(solver, mat, f"uds_diff::{api.UDF_LIB}", 3)
         zones = [z for z in FLUID_ZONES if z in p["mesh_info"]["cell_zones"] and z != "bulk"]
         api.cell_sources(solver, zones, {0: f"src_oh::{api.UDF_LIB}", 1: f"src_sil::{api.UDF_LIB}",
                                          2: f"src_h2::{api.UDF_LIB}"})
