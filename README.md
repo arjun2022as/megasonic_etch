@@ -1,22 +1,44 @@
 # megasonic_etch: megasonic-assisted TMAH etching of poly-Si in high-aspect-ratio slits
 
 Model for Project 1 of the UA proposal *Megasonics for Improved Wet Processing of Materials in High Aspect
-Ratio Structures*: 5 wt% TMAH at 60 °C etching the poly-Si layers of an alternating SiO₂/poly-Si stack
-along a 100 nm × 10 µm slit, with a 1–3 MHz megasonic field in a single-wafer spin tool.
+Ratio Structures*. After the 100:1 dry etch, 5 wt% TMAH at 60 °C recesses the poly-Si layers of an alternating
+SiO₂/poly-Si stack (50/50 nm) along a 100 nm × 10 µm slit; SiO₂ stays. Single-wafer spin tool with a MegPie
+megasonic transducer, 1–3 MHz, 0.5–2 W/cm². Transport: diffusion + electromigration (Nernst–Planck, zero
+current, electroneutral) of OH⁻, silicate and dissolved H₂. Every formula, source and assumption:
+[docs/formulation.md](docs/formulation.md).
 
-- `docs/formulation.md`: every equation, property and assumption, with sources and the second check of each
-- `etchsim/props.py`: conditions and properties (ASSUMED values marked)
-- `etchsim/acoustics.py`: megasonic field at the wafer and in the slit (reflection from Si, Stokes layer, decay)
-- `etchsim/slit1d.py`: quasi-steady 1D Nernst–Planck (diffusion + electromigration) + sidewall reaction
-- `etchsim/pocket.py`: lateral recess pockets, H₂ bubble criterion
-- `run_1d.py`: reference study, writes `results_1d/` (profiles.png, megasonic_effect.png, summary.csv)
-- `run_evolution.py`: recess growth over 2 min, H₂ bubble-blocking scenarios, acoustic vs Laplace pressure
-- `tests/test_formulas.py`: independent checks (20)
+| Part | Files | What |
+|---|---|---|
+| 1D reference | `etchsim/`, `run_1d.py`, `run_evolution.py` | fast, checked twice; recess growth and H₂-bubble scenarios |
+| 2D Fluent | `fluent2d/` (mesh, UDF, case plan), `run_case.py`, `cases.csv` | slit mouth, megasonic oscillating flow, angle sweep |
+| HPC | `run_case.slurm`, `submit_cases.sh`, `check_runs.sh` | Puma, 4 cores per case |
+| Analysis | `analyze_2d.py` | angle_sweep.png, megasonic_mixing.png, frequency_power.png, verification.md |
+| Tests | `tests/` | 27 checks (formulas, solver, mesh, UDF algebra vs 1D) |
+
+## Running on Puma (folder ~/project1)
+
+```bash
+cd ~ && git clone https://github.com/arjun2022as/megasonic_etch.git project1      # later: cd ~/project1 && git pull
+cd ~/project1
+# 1. discovery (about 10 min): compiles the UDF and lists Fluent 2024 R1's settings for the UDF hookups
+bash submit_cases.sh M0_none --discover
+#    then send: tail -40 logs/M0_none_*.out   and   results/M0_none_discover/discover.txt
+# 2. smoke test (after the hookups are confirmed)
+bash submit_cases.sh A_f1_I2_t45 --setup-only
+# 3. everything (16 jobs, 1-10 h each)
+bash submit_cases.sh .
+bash check_runs.sh
+# 4. figures (compute node)
+interactive -a krishna -t 00:30:00
+cd ~/project1 && source ~/venvs/pyfluent241/bin/activate && python analyze_2d.py && exit
+```
+
+Uses the `~/venvs/pyfluent241` environment from `3d_nand`. The UDF is compiled by Fluent on the node.
+
+## Local (no Fluent)
 
 ```bash
 uv run --no-project --with numpy --with scipy --with matplotlib python run_1d.py
+uv run --no-project --with numpy --with scipy --with matplotlib python run_evolution.py
 uv run --no-project --with pytest --with numpy --with scipy pytest -q
 ```
-
-Stage 2 (planned): 2D Fluent 2024R1 model with UDFs for the slit mouth, the oscillating flow and the
-recess pockets, checked against the 1D model.

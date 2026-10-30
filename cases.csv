@@ -1,0 +1,17 @@
+case,walltime,f_MHz,I_W_cm2,theta_deg,recess_nm,order,migration,er_ref_nm_min,refine,osc_scale,iters,note
+M0_none,04:00:00,0,0,90,0,,1,,1,1,20,no megasonic: spin shear only
+A_f1_I2_t90,04:00:00,1,2,90,0,,1,,1,1,20,"1 MHz, 2 W/cm2, incidence 90 deg from the wafer"
+A_f1_I2_t75,04:00:00,1,2,75,0,,1,,1,1,20,"1 MHz, 2 W/cm2, incidence 75 deg from the wafer"
+A_f1_I2_t60,04:00:00,1,2,60,0,,1,,1,1,20,"1 MHz, 2 W/cm2, incidence 60 deg from the wafer"
+A_f1_I2_t45,04:00:00,1,2,45,0,,1,,1,1,20,"1 MHz, 2 W/cm2, incidence 45 deg from the wafer"
+A_f1_I2_t30,04:00:00,1,2,30,0,,1,,1,1,20,"1 MHz, 2 W/cm2, incidence 30 deg from the wafer"
+A_f1_I2_t15,04:00:00,1,2,15,0,,1,,1,1,20,"1 MHz, 2 W/cm2, incidence 15 deg from the wafer"
+F_f2_I2_t45,04:00:00,2,2,45,0,,1,,1,1,20,"2 MHz, 2 W/cm2, 45 deg"
+F_f3_I2_t45,04:00:00,3,2,45,0,,1,,1,1,20,"3 MHz, 2 W/cm2, 45 deg"
+P_f1_I05_t45,04:00:00,1,0.5,45,0,,1,,1,1,20,"1 MHz, 0.5 W/cm2, 45 deg"
+P_f1_I1_t45,04:00:00,1,1,45,0,,1,,1,1,20,"1 MHz, 1 W/cm2, 45 deg"
+R_none_r300,06:00:00,0,0,90,300,,1,,1,1,20,"poly-Si recessed 300 nm, no megasonic"
+R_f1_I2_t45_r300,06:00:00,1,2,45,300,,1,,1,1,20,"poly-Si recessed 300 nm, 1 MHz 2 W/cm2 45 deg"
+V_nomig,04:00:00,0,0,90,0,,0,,1,1,20,check: electromigration off
+V_order1,04:00:00,0,0,90,0,1.0,1,,1,1,20,check: first-order rate in OH-
+V_mesh2,10:00:00,0,0,90,0,,1,,2,1,20,check: cells refined 2x (no megasonic)

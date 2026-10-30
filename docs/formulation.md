@@ -104,6 +104,39 @@ Check: a uniform liquid fraction ε reproduces the cosh solution with D → εD.
 
 **Indicator for megasonic action on confined bubbles:** the pressure amplitude at the wafer, |1+R|p₀, compared with the Laplace pressure 2γ/W = 1.32 MPa.
 
-## 7. Stage 2 (Fluent 2D, UDFs), planned
+## 7. Stage 2: 2D Fluent model (`fluent2d/`, `run_case.py`)
+
+**Geometry (`fluent2d/mesh2d.py`).**
+- Slit 100 nm × 10 µm, plus pockets of depth R in every poly-Si layer.
+- Above it, 1 µm of wafer (one pitch) and 2 µm of liquid.
+- Cells: 5 nm across, 10 nm along the depth (5 rows per layer), graded from 5 nm above the wafer. That gives 28 k cells at R = 0 and 88 k at R = 300 nm.
+- Zones: `poly` (etch front), `oxide`, `wafer-top`, `inlet`, `top`, `outlet`.
+
+**Equations (UDF `fluent2d/udf/etch.c`, constants generated into `etch_params.h`).**
+- Three user-defined scalars: φ_i = c_i/ρ for OH⁻, silicate and H₂.
+- Diffusivity: Γ = ρ(D_i + D_osc).
+- Electromigration: added to the convective face flux of the two ions as ρ z_i D_i (S·A)/Q. On this orthogonal mesh S·A comes exactly from the two cell values, so the flux is the same on both sides of a parallel partition.
+- Reaction: a source term in the cells next to poly-Si faces, ν_i r × (poly length / cell area), implicit for OH⁻.
+- These are the same equations as the 1D model; `tests/test_fluent2d.py` checks the C electromigration term against `slit1d` algebraically.
+
+**Flow.**
+- Laminar and incompressible.
+- Inlet and top: u = G y + amp·u_t[cos ωt − e^{−y/δ} cos(ωt − y/δ)], v = 0. This is the exact Stokes-layer solution over a flat wall plus the steady Couette shear between the spinning wafer and the MegPie face, G = Ωr/gap (300 rpm, r = 50 mm, gap 2 mm ASSUMED → 785 s⁻¹).
+- u_t comes from §5 for each incidence angle θ. θ = 90° (MegPie) gives u_t = 0.
+
+**Two phases.**
+- **A:** only when u_t > 0. The oscillating flow runs 8 cycles to settle, then 10 cycles are sampled at 40 steps per cycle. The variance of u and v gives D_osc = (var u + var v)/ω, i.e. |u₁|²/2ω, the upper bound.
+- **B:** amp = 0. TMAH transport with D_osc is advanced with time steps of 10⁻⁷ up to 10⁻³ s to about 0.155 s (about 6 diffusion times of the slit), giving the quasi-steady state.
+- **Boundary conditions:** inlet, top and outlet backflow use the mouth concentrations from the 1D model (wafer-level boundary layer).
+
+**Outputs.** Each process writes `dump_<id>.csv` (poly-Si cells and the centre column). `run_case.py` turns these into the etch rate per layer, top/bottom and bottom/top. `analyze_2d.py` makes the angle, mixing, frequency/power and verification figures.
+
+**Cases (`make_cases.py`, 16).**
+- M0: no megasonic.
+- A: incidence 90/75/60/45/30/15° at 1 MHz and 2 W/cm².
+- F: 2 and 3 MHz at 45°.
+- P: 0.5 and 1 W/cm² at 45°.
+- R: 300 nm recess, with and without megasonics.
+- V: checks (no electromigration, first-order rate, mesh refined 2×).
 
 The 2D model resolves the mouth region: the oscillating Stokes flow over the slit, the steady spin shear, and the lateral recess pockets as the etch advances. It uses user-defined scalars for OH⁻, silicate and H₂ with the same Nernst–Planck / zero-current flux (DEFINE_UDS_FLUX) and a reaction-flux wall condition on poly-Si faces only. The 1D model is its reference.
