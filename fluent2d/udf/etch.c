@@ -234,9 +234,21 @@ static real src(cell_t c, Thread *t, real nu, real dS[], int eqn, int implicit)
     return nu * av * rate_si(c_oh);                               /* mol/m3/s = rho phi per second */
 }
 
-DEFINE_SOURCE(src_oh, c, t, dS, eqn) { return src(c, t, -2.0, dS, eqn, 1); }
-DEFINE_SOURCE(src_sil, c, t, dS, eqn) { return src(c, t, 1.0, dS, eqn, 0); }
-DEFINE_SOURCE(src_h2, c, t, dS, eqn) { return src(c, t, 2.0, dS, eqn, 0); }
+/* bodies on their own lines: Fluent's udf_names.c generator copies the rest of the macro line verbatim */
+DEFINE_SOURCE(src_oh, c, t, dS, eqn)
+{
+    return src(c, t, -2.0, dS, eqn, 1);
+}
+
+DEFINE_SOURCE(src_sil, c, t, dS, eqn)
+{
+    return src(c, t, 1.0, dS, eqn, 0);
+}
+
+DEFINE_SOURCE(src_h2, c, t, dS, eqn)
+{
+    return src(c, t, 2.0, dS, eqn, 0);
+}
 
 /* every compute process writes its own cells: poly-Si wall cells and the slit/mouth centre column.
    File dump_<id>.csv in the working directory; run_case.py concatenates them (no Fluent export needed). */
