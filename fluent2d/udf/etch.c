@@ -345,6 +345,47 @@ DEFINE_ON_DEMAND(dump)
 #endif
 }
 
+/* Whole-field snapshot for contour plots (make_contours.py): every interior cell of this process to
+   field_<id>.csv with concentrations, the instantaneous velocity, D_osc, the phase-A mean speed and the
+   local etch rate (poly-Si wall cells only). */
+DEFINE_ON_DEMAND(dump_field)
+{
+#if !RP_HOST
+    Domain *d = Get_Domain(1);
+    Thread *t;
+    cell_t c;
+    char name[64];
+    FILE *fp;
+    real x[ND_ND];
+#if PARALLEL
+    int id = myid;
+#else
+    int id = 0;
+#endif
+    sprintf(name, "field_%d.csv", id);
+    fp = fopen(name, "w");
+    if (fp == NULL)
+        return;
+    fprintf(fp, "x,y,c_oh,c_sil,c_h2,u,v,d_osc,u_mean,etch_m_s\n");
+    thread_loop_c(t, d)
+    {
+        if (!HAS_UDM(t) || !HAS_UDS(t))
+            continue;
+        begin_c_loop_int(c, t)
+        {
+            real co = cell_c(c, t, 0);
+            int poly = C_UDMI(c, t, UDM_AV) > 0.0;
+            C_CENTROID(x, c, t);
+            fprintf(fp, "%.9e,%.9e,%.9e,%.9e,%.9e,%.6e,%.6e,%.6e,%.6e,%.6e\n", x[0], x[1], co, cell_c(c, t, 1),
+                    cell_c(c, t, 2), C_U(c, t), C_V(c, t), C_UDMI(c, t, UDM_DOSC), C_UDMI(c, t, UDM_UMEAN),
+                    poly ? rate_si(co) * M_SI / RHO_SI : 0.0);
+        }
+        end_c_loop_int(c, t)
+    }
+    fclose(fp);
+#endif
+}
+
 /* etch rate into UDM 7 and a one-line summary */
 DEFINE_ON_DEMAND(report)
 {

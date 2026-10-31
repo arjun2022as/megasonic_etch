@@ -7,7 +7,7 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
 | # | Step | Check |
 |---|---|---|
 | 1 | Full `M0_none` (no megasonics), `bash submit_cases.sh M0_none` | bottom/top ~ 0.954 (1D) |
-| 2 | Contour/movie script like 3d_nand `make_movies`: contours of OH-, silicate, H2, velocity, D_osc, etch rate along the slit, per case, from `<case>-final.cas.h5` | PNGs per case |
+| 2 | `make_contours.py <cases>`: slit + mouth maps (OH-, silicate, H2/sat, speed, D_osc) and depth profiles; needs field_*.csv from dump_field (runs after 2026-10-31) | PNGs in results/<case>/plots |
 | 3 | FLAT WAFER first (normal incidence, how tools normally run): frequency 1/2/3 MHz x power 0.5/1/2 W/cm2 at 90 deg | case-by-case results |
 | 4 | Then the ANGLE cases (A_*, F_*, P_* at 45 deg, R_*), then V_* checks | every case `done:` |
 | 5 | `analyze_2d.py` figures + verification.md | 2D vs 1D |
@@ -19,6 +19,7 @@ of the slit, xi = L|1+R|p0/(rho c^2), already in etchsim/acoustics.py), then fla
 Every figure/summary: imposed oscillating flow + modelled mixing, NOT a full acoustic-streaming solution.
 
 ## Log
+- 2026-10-31 M0_none FINAL (job 24478676): top 292.41, bottom 280.01 nm/min, bottom/top 0.95758 vs 1D 0.95749 (agree to 0.01 %); both rates 0.4 % below 1D because the 2D mouth OH is 495 vs 503 ((495/503)^0.25 = 0.996). Recess after 2 min: 584.8 vs 560.0 nm (24.8 nm). VALID BASELINE. Step 2 started: dump_field UDF (whole-field CSV at the end of each run) + make_contours.py (slit and mouth maps, depth profiles, multi-case comparison; matplotlib).
 - 2026-10-31 job 24478676 (95ac443): check_2d.py PASSES. D_eff = intended within 1 % at all interior depths (OH 1.124e-8, SIL 1.96e-9, H2 9.6e-9), N_TMA ~1e-6 (was 0.08), E_eff OH = E_eff SIL (one consistent field). Profile mouth->bottom: OH 495 -> 412 (1D 503 -> 418.5), SIL 69 -> 146 (1D max 142), H2 51 -> 91.6 mM (131x sat). 2D mouth is 8 mM below the 1D mouth value (2 um bulk layer above the slit). Expected bottom/top ~0.955 (from (412/495)^0.25); confirm with the done: line. M0_none = VALID baseline.
 - 2026-10-31 job 24478379 (M0_none with d2b0bd5): c_OH 503.1 and c_H2 44.5 FROZEN for 0.3 s, bottom/top 1.0000, silicate D still D_H2. Two causes: (1) the run_case.py edit never saved, so Fluent still got (D_OH, D_SIL, D_H2) and used D_H2 for all; (2) the positive explicit remainder (D_i - D_SIL, up to 4.7x Fluent's implicit D) made OH/H2 Jacobi-slow: each iteration moved c_OH ~1e-4 mM. Fix: all UDS get rho*D_OH (largest) in Fluent, remainder D_i - D_OH <= 0 as deferred correction (no diag). Rerun M0_none.
 - 2026-10-30 check_2d.py after the D_BASE fix (job state not yet confirmed): c_OH flat 503.0 and c_H2 flat 44.5 at every depth (= mouth values, no depletion at all), c_SIL 67 -> 88.5, silicate D_eff still 9.6e-9 (should be 1.96e-9). Not a valid steady state; need the job log (still running? crashed? stale header?). Living request document for the user: docs/make_inputs_doc.js -> Downloads/Project1_Inputs_Needed.docx (keep VERSION and the received log current).

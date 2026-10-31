@@ -85,7 +85,7 @@ def main():
     if (out / "summary.json").exists() and not (a.force or tag):
         raise SystemExit(f"{out} already has a finished run; use --force")
     out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("dump_*.csv"):
+    for old in [*out.glob("dump_*.csv"), *out.glob("field_*.csv")]:
         old.unlink()
     msh = out / f"{a.case}.msh"
     p["mesh_info"] = mesh2d.main(mesh_argv(p, msh))
@@ -190,6 +190,7 @@ def main():
                     f"{m['c_oh_bottom']:.1f}, c_SIL bottom {m['c_sil_bottom']:.1f}, c_H2 bottom {m['c_h2_bottom']:.1f}")
         api.on_demand(solver, "report")
         api.on_demand(solver, "dump")
+        api.on_demand(solver, "dump_field")                 # whole field for make_contours.py
         api.first_ok("write case/data", lambda: s.file.write(file_type="case-data", file_name=f"{a.case}-final.cas.h5"))
         m = metrics(*read_dumps(out))
         conv = abs(hist[-1]["uniformity"] - hist[-2]["uniformity"]) if len(hist) > 1 else float("nan")
