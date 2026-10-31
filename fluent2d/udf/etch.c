@@ -198,7 +198,9 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
 
 /* Face-flux terms that Fluent 24.1 cannot take through its settings API, added as a cell source:
  *  (a) megasonic mixing div(rho D_osc grad phi_i): flux k_f (phi_nb - phi_c), k_f = rho D_osc,f A.A/|A.dr|,
- *      D_osc,f = mean of the two cells (the per-UDS user-defined diffusivity field is inactive in 24.1);
+ *      D_osc,f = mean of the two cells (the per-UDS user-defined diffusivity field is inactive in 24.1),
+ *      plus the molecular remainder D_i - D_BASE: 24.1 applies ONE constant diffusivity to all UDS (M0_none
+ *      2026-10-30: all three diffused with D_H2), so every UDS gets rho D_BASE in Fluent and the rest is here;
  *  (b) electromigration, ions only: outward flux J = z_i D_i c_f (S.A_out)/Q_f [mol/s per m depth],
  *      S.A_out = sum_j z_j D_j (c_j,nb - c_j,c) A.A/|A.dr|, Q_f = sum_j z_j^2 D_j c_j,f,
  *      c_f = mean of the two cells (central; migration is diffusion-like, cell Peclet << 1).
@@ -212,6 +214,7 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
     real s = 0.0, diag = 0.0, dc = C_UDMI(c, t, UDM_DOSC), xc[ND_ND];
     real zi = (i == 0) ? -1.0 : (i == 1) ? -2.0 : 0.0;
     real Di = (i == 0) ? D_OH : (i == 1) ? D_SIL : D_H2;
+    real dm = Di - D_BASE;                                    /* molecular D not carried by Fluent */
     real coh = cell_c(c, t, 0), csi = cell_c(c, t, 1), ci = cell_c(c, t, i);
     int migrate = MIGRATION && zi != 0.0;
     C_CENTROID(xc, c, t);
@@ -233,9 +236,9 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
         NV_VV(dr, =, xn, -, xc);
         geo = NV_DOT(A, A) / fabs(NV_DOT(A, dr));             /* grad c . A_out = (c_nb - c_c) geo */
         dn = C_UDMI(cn, tn, UDM_DOSC);
-        if (dc > 0.0 || dn > 0.0)                             /* (a) mixing */
+        if (dc > 0.0 || dn > 0.0 || dm > 0.0)                 /* (a) mixing + molecular remainder */
         {
-            k = RHO * 0.5 * (dc + dn) * geo;
+            k = RHO * (0.5 * (dc + dn) + dm) * geo;
             s += k * (C_UDSI(cn, tn, i) - C_UDSI(c, t, i));
             diag -= k;
         }

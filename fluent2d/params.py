@@ -120,6 +120,7 @@ def header(p):
     """Constants for udf/etch.c (SI units)."""
     n_poly = round(P.L_SLIT / P.LAYER) // 2
     vals = dict(RHO=P.RHO_L, CB=P.C_BULK, D_OH=P.D["OH"], D_SIL=P.D["SIL"], D_TMA=P.D["TMA"], D_H2=P.D["H2"],
+                D_BASE=min(P.D[k] for k in ("OH", "SIL", "H2")),
                 K_SI=P.si_flux(p["er_ref"]), ORDER=p["order"], EPS=1e-6, OMEGA=p["omega"],
                 OSC_SCALE=p["osc_scale"], M_SI=P.M_SI, RHO_SI=P.RHO_SI,
                 POLY_LENGTH=2 * n_poly * P.LAYER, W_SLIT=P.W_SLIT, DX_CELL=p["mesh"]["dx"])
