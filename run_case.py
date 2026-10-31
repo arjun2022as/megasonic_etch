@@ -56,6 +56,9 @@ def metrics(poly, centre):
                 uniformity=bot / top if top > 0 else float("nan"),
                 er_mean_nm_min=sum(er) / len(er) * 6e10 if er else float("nan"),
                 c_oh_bottom=cen[-1]["c_oh"] if cen else float("nan"),
+                c_oh_mouth=cen[0]["c_oh"] if cen else float("nan"),
+                c_sil_bottom=cen[-1]["c_sil"] if cen else float("nan"),
+                c_h2_bottom=cen[-1]["c_h2"] if cen else float("nan"),
                 c_oh_min=min((r["c_oh"] for r in poly), default=float("nan")),
                 h2_max=max((r["c_h2"] for r in poly), default=float("nan")),
                 d_osc_max=max((r["d_osc"] for r in centre), default=0.0),
@@ -179,7 +182,8 @@ def main():
             m = metrics(*read_dumps(out))
             hist.append(dict(t_B=t_sim, dt=dt, **{k: v for k, v in m.items() if k != "layers"}))
             api.log(f"phase B t = {t_sim:.4g} s: etch top {m['er_top_nm_min']:.2f} bottom {m['er_bottom_nm_min']:.2f} "
-                    f"nm/min, bottom/top {m['uniformity']:.4f}, c_OH bottom {m['c_oh_bottom']:.2f}")
+                    f"nm/min, bottom/top {m['uniformity']:.4f}, c_OH mouth {m['c_oh_mouth']:.1f} bottom "
+                    f"{m['c_oh_bottom']:.1f}, c_SIL bottom {m['c_sil_bottom']:.1f}, c_H2 bottom {m['c_h2_bottom']:.1f}")
         api.on_demand(solver, "report")
         api.on_demand(solver, "dump")
         api.first_ok("write case/data", lambda: s.file.write(file_type="case-data", file_name=f"{a.case}-final.cas.h5"))

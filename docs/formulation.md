@@ -126,7 +126,7 @@ Check: a uniform liquid fraction ε reproduces the cosh solution with D → εD.
 
 **Two phases.**
 - **A:** only when u_t > 0. The oscillating flow runs 8 cycles to settle, then 10 cycles are sampled at 40 steps per cycle. The variance of u and v gives D_osc = (var u + var v)/ω, i.e. |u₁|²/2ω, the upper bound.
-- **B:** amp = 0. TMAH transport with D_osc is advanced with time steps of 10⁻⁷ up to 10⁻³ s to about 0.155 s (about 6 diffusion times of the slit), giving the quasi-steady state.
+- **B:** amp = 0. TMAH transport with D_osc is advanced with time steps of 10⁻⁷ up to 10⁻³ s to about 0.305 s (6 silicate diffusion times L²/D_SIL = 51 ms; OH⁻ needs 9 ms), reported every 50 ms at the end so the quasi-steady state can be checked.
 - **Boundary conditions:** inlet, top and outlet backflow use the mouth concentrations from the 1D model (wafer-level boundary layer).
 
 **Outputs.** Each process writes `dump_<id>.csv` (poly-Si cells and the centre column). `run_case.py` turns these into the etch rate per layer, top/bottom and bottom/top. `analyze_2d.py` makes the angle, mixing, frequency/power and verification figures.

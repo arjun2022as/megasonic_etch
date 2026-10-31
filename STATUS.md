@@ -19,6 +19,7 @@ of the slit, xi = L|1+R|p0/(rho c^2), already in etchsim/acoustics.py), then fla
 Every figure/summary: imposed oscillating flow + modelled mixing, NOT a full acoustic-streaming solution.
 
 ## Log
+- 2026-10-30 M0_none full run (0.155 s): top 292.06, bottom 274.45 nm/min, bottom/top 0.9397, c_OH bottom  380.3 (1D: 293.57 / 281.09 / 0.9575 / OH min 418.5). OH drop along slit 40 % larger than 1D; quasi-steady  not checked (no report between 5 ms and 155 ms). Phase B extended to 0.305 s, reports every 50 ms with  c_OH mouth, c_SIL and c_H2 bottom (1D: mouth 503, SIL max 142 mM, H2 122x sat). Rerun M0_none --force.
 - 2026-10-30: --discover ran on Puma, discover.txt read. Fluent 2024R1 paths coded in api.py (f5af647):
   no `setup.user_defined` (UDM/UDS count via TUI `/define/user-defined/...`); material is default `air`
   (properties overwritten); `uds_diffusivity.option` only 'defined-per-uds', then per

@@ -25,7 +25,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES_CSV = ROOT / "cases.csv"
 GAP = 2e-3                 # m, ASSUMED MegPie-to-wafer liquid gap
 CYCLES_SETTLE, CYCLES_AVG, STEPS_PER_CYCLE = 8, 10, 40
-PHASE_B = [(1e-7, 20), (1e-6, 30), (1e-5, 30), (1e-4, 50), (1e-3, 150)]   # (dt, steps): ~0.155 s
+# (dt, steps): ~0.305 s = 6 silicate diffusion times L^2/D_SIL (51 ms); 1 ms steps reported every 50 ms so
+# the last reports show whether the slit is quasi-steady (M0_none at 0.155 s was not checked: 0.940 vs 1D 0.957)
+PHASE_B = [(1e-7, 20), (1e-6, 30), (1e-5, 30), (1e-4, 50)] + [(1e-3, 50)] * 6
 
 
 def load_case(name, path=CASES_CSV):
