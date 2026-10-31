@@ -2,11 +2,16 @@
 """Contour maps and depth profiles of finished 2D cases (matplotlib only, no Fluent).
 
     python make_contours.py M0_none                     # results/M0_none/plots/*.png
-    python make_contours.py M0_none A_f1_I2_t45 ...     # also results/compare/profiles_<cases>.png
+    python make_contours.py M0_none A_f1_I2_t45 ...     # each case, plus the comparison in results/compare/
+    python make_contours.py --all                       # every finished case, plus the comparison
 
-Maps need field_*.csv (written by dump_field at the end of run_case.py); the depth profiles need only
-dump_*.csv. Every figure says that the megasonic field is an imposed oscillating flow plus modelled mixing,
-not a full acoustic-streaming solution.
+Per case: slit and mouth maps (OH-, silicate, H2/saturation, speed, D_osc) and depth profiles.
+Comparison (two or more cases): for each quantity one figure with every case side by side on ONE colour
+scale (maps_<quantity>.png), maps of the change from the baseline M0_none (diff_<quantity>.png), and the
+depth profiles overlaid (profiles.png).
+Maps need field_*.csv (written by dump_field at the end of run_case.py); the profiles need only dump_*.csv.
+Every figure says that the megasonic field is an imposed oscillating flow plus modelled mixing, not a full
+acoustic-streaming solution.
 """
 import csv
 import glob
@@ -21,6 +26,10 @@ from etchsim import props as P  # noqa: E402
 
 NOTE = ("Megasonics = imposed oscillating flow + modelled mixing D_osc, not a full acoustic-streaming solution. "
         "x and y scales differ.")
+BASELINE = "M0_none"
+# view name: x range (nm), y range (um), figure size per panel (in)
+VIEWS = {"slit": ((-50, 150), (-P.L_SLIT * 1e6 - 0.2, 0.5), (2.4, 8.5)),
+         "mouth": ((-500, 600), (-1.0, 1.0), (3.0, 4.2))}
 
 
 def mpl():
@@ -33,14 +42,6 @@ def mpl():
     except ImportError:
         raise SystemExit("matplotlib missing: source ~/venvs/pyfluent241/bin/activate && pip install matplotlib")
     return plt, mtri, np
-
-
-def read_field(out):
-    rows = []
-    for fn in glob.glob(str(out / "field_*.csv")):
-        with open(fn, newline="") as f:
-            rows += [{k: float(v) for k, v in r.items()} for r in csv.DictReader(f)]
-    return rows
 
 
 def recess_of(out):
@@ -59,49 +60,137 @@ def fluid(x, y, recess, np):
     return (y >= 0) | in_slit | in_pocket
 
 
-def maps(case, out, plt, mtri, np):
-    rows = read_field(out)
+def load_field(out, np):
+    """Arrays of the whole-field snapshot, sorted by position so cases on the same mesh line up."""
+    rows = []
+    for fn in glob.glob(str(out / "field_*.csv")):
+        with open(fn, newline="") as f:
+            rows += [{k: float(v) for k, v in r.items()} for r in csv.DictReader(f)]
     if not rows:
+        return None
+    rows.sort(key=lambda r: (round(r["y"], 12), round(r["x"], 12)))
+    a = {k: np.array([r[k] for r in rows]) for k in rows[0]}
+    a["recess"] = recess_of(out)
+    a["osc"] = a["d_osc"].max() > 0
+    return a
+
+
+def quantities(a, np):
+    """(key, label, values, log scale?) for one case."""
+    q = [("c_oh", "OH$^-$ (mM)", a["c_oh"], False),
+         ("c_sil", "silicate (mM)", a["c_sil"], False),
+         ("h2", "H$_2$ / saturation (-)", a["c_h2"] / P.H2_SAT, False),
+         ("speed", "speed (m/s): phase-A mean if oscillating", a["u_mean"] if a["osc"] else np.hypot(a["u"], a["v"]), True),
+         ("dosc", "D$_{osc}$ / D$_{OH}$ (-)", a["d_osc"] / P.D["OH"], True)]
+    return q if a["osc"] else q[:4]
+
+
+def view_tri(a, view, mtri, np):
+    (x0, x1), (y0, y1), _ = VIEWS[view]
+    xs, ys = a["x"] * 1e9, a["y"] * 1e6                         # nm, um
+    sel = (xs > x0 - 50) & (xs < x1 + 50) & (ys > y0 - 0.2) & (ys < y1 + 0.2)
+    tri = mtri.Triangulation(xs[sel], ys[sel])
+    cx = xs[sel][tri.triangles].mean(axis=1) * 1e-9
+    cy = ys[sel][tri.triangles].mean(axis=1) * 1e-6
+    tri.set_mask(~fluid(cx, cy, a["recess"], np))
+    return tri, sel
+
+
+def panel(fig, ax, tri, v, label, log, view, np, vmin=None, vmax=None, cmap="viridis"):
+    (x0, x1), (y0, y1), _ = VIEWS[view]
+    if log:
+        v = np.log10(np.maximum(v, 1e-12))
+        label = "log$_{10}$ " + label
+    if vmin is None:
+        vmin, vmax = float(v.min()), float(v.max())
+    if vmax <= vmin:
+        vmax = vmin + 1e-9 * max(1.0, abs(vmin))
+    levels = np.linspace(vmin, vmax, 31)
+    cs = ax.tricontourf(tri, np.clip(v, vmin, vmax), levels=levels, cmap=cmap)
+    fig.colorbar(cs, ax=ax, shrink=0.8).set_label(label, fontsize=8)
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y0, y1)
+    ax.set_xlabel("x (nm)")
+
+
+def maps(case, out, plt, mtri, np):
+    a = load_field(out, np)
+    if a is None:
         print(f"{case}: no field_*.csv (rerun the case with the current run_case.py); maps skipped")
         return
-    a = {k: np.array([r[k] for r in rows]) for k in rows[0]}
-    recess = recess_of(out)
-    osc = a["d_osc"].max() > 0
-    fields = [("c_oh", "OH$^-$ (mM)", a["c_oh"], None),
-              ("c_sil", "silicate (mM)", a["c_sil"], None),
-              ("h2", "H$_2$ / saturation (-)", a["c_h2"] / P.H2_SAT, None),
-              ("speed", "phase-A mean speed (m/s)" if osc else "speed (m/s)",
-               a["u_mean"] if osc else np.hypot(a["u"], a["v"]), "log")]
-    if osc:
-        fields.append(("dosc", "D$_{osc}$ / D$_{OH}$ (-)", a["d_osc"] / P.D["OH"], "log"))
-    views = [("slit", (-50, 150), (-P.L_SLIT * 1e6 - 0.2, 0.5), (len(fields) * 2.4, 8.5)),
-             ("mouth", (-500, 600), (-1.0, 1.0), (len(fields) * 3.0, 4.2))]
-    for vname, (x0, x1), (y0, y1), size in views:
-        xs, ys = a["x"] * 1e9, a["y"] * 1e6                     # nm, um
-        sel = (xs > x0 - 50) & (xs < x1 + 50) & (ys > y0 - 0.2) & (ys < y1 + 0.2)
-        tri = mtri.Triangulation(xs[sel], ys[sel])
-        cx = xs[sel][tri.triangles].mean(axis=1) * 1e-9
-        cy = ys[sel][tri.triangles].mean(axis=1) * 1e-6
-        tri.set_mask(~fluid(cx, cy, recess, np))
-        fig, axes = plt.subplots(1, len(fields), figsize=size, constrained_layout=True)
-        for ax, (_, label, val, scale) in zip(axes, fields):
-            v = val[sel]
-            if scale == "log":
-                v = np.log10(np.maximum(v, 1e-12))
-                label = "log$_{10}$ " + label
-            cs = ax.tricontourf(tri, v, levels=30, cmap="viridis")
-            fig.colorbar(cs, ax=ax, shrink=0.8).set_label(label, fontsize=8)
-            ax.set_xlim(x0, x1)
-            ax.set_ylim(y0, y1)
-            ax.set_xlabel("x (nm)")
+    qs = quantities(a, np)
+    for view in VIEWS:
+        tri, sel = view_tri(a, view, mtri, np)
+        w, h = VIEWS[view][2]
+        fig, axes = plt.subplots(1, len(qs), figsize=(w * len(qs), h), constrained_layout=True)
+        for ax, (_, label, val, log) in zip(axes, qs):
+            panel(fig, ax, tri, val[sel], label, log, view, np)
             ax.set_title(label, fontsize=9)
         axes[0].set_ylabel("y (µm), mouth at 0")
-        fig.suptitle(f"{case}: {vname} view", fontsize=11)
+        fig.suptitle(f"{case}: {view} view", fontsize=11)
         fig.text(0.01, 0.002, NOTE, fontsize=7, style="italic")
-        fn = out / "plots" / f"{case}_{vname}.png"
+        fn = out / "plots" / f"{case}_{view}.png"
         fig.savefig(fn, dpi=130)
         plt.close(fig)
         print("wrote", fn)
+
+
+def compare_maps(cases, outs, plt, mtri, np, dest):
+    """Every case side by side per quantity on one colour scale, and the change from the baseline."""
+    fields = [(c, load_field(o, np)) for c, o in zip(cases, outs)]
+    fields = [(c, a) for c, a in fields if a is not None]
+    if len(fields) < 2:
+        print("comparison maps need field_*.csv in at least two cases; skipped")
+        return
+    base = dict(fields).get(BASELINE)
+    keys = [q[0] for q in quantities(fields[0][1], np)] + (["dosc"] if any(a["osc"] for _, a in fields) else [])
+    keys = list(dict.fromkeys(keys))
+    for key in keys:
+        vals, label, log = [], None, False
+        for c, a in fields:
+            q = {k: (lab, v, lg) for k, lab, v, lg in quantities(a, np)}
+            if key in q:
+                label, v, log = q[key]
+            else:                                                  # D_osc of a non-oscillating case is zero
+                v = np.zeros_like(a["x"])
+            vals.append((c, a, v))
+        for view in VIEWS:
+            w, h = VIEWS[view][2]
+            sels = [(c, a, v) + view_tri(a, view, mtri, np) for c, a, v in vals]
+            allv = np.concatenate([np.log10(np.maximum(v[s], 1e-12)) if log else v[s] for _, _, v, _, s in sels])
+            vmin, vmax = float(allv.min()), float(allv.max())
+            fig, axes = plt.subplots(1, len(sels), figsize=(w * len(sels), h), constrained_layout=True, squeeze=False)
+            for ax, (c, a, v, tri, s) in zip(axes[0], sels):
+                panel(fig, ax, tri, v[s], label, log, view, np, vmin, vmax)
+                ax.set_title(c, fontsize=9)
+            axes[0][0].set_ylabel("y (µm), mouth at 0")
+            fig.suptitle(f"All cases, {label}, {view} view (one colour scale)", fontsize=11)
+            fig.text(0.01, 0.002, NOTE, fontsize=7, style="italic")
+            fn = dest / f"maps_{key}_{view}.png"
+            fig.savefig(fn, dpi=110)
+            plt.close(fig)
+            print("wrote", fn)
+            # change from the baseline, only for cases on the same mesh (same cell count and positions)
+            if base is None or key in ("dosc", "speed"):
+                continue
+            bq = {k: v for k, _, v, _ in quantities(base, np)}[key]
+            diffs = [(c, a, v - bq, tri, s) for c, a, v, tri, s in sels
+                     if c != BASELINE and a["x"].shape == base["x"].shape and np.allclose(a["x"], base["x"])
+                     and np.allclose(a["y"], base["y"])]
+            if not diffs:
+                continue
+            m = max(float(np.abs(d[s]).max()) for _, _, d, _, s in diffs) or 1e-9
+            fig, axes = plt.subplots(1, len(diffs), figsize=(w * len(diffs), h), constrained_layout=True, squeeze=False)
+            for ax, (c, a, d, tri, s) in zip(axes[0], diffs):
+                panel(fig, ax, tri, d[s], "change from " + BASELINE + ": " + label, False, view, np, -m, m, "RdBu_r")
+                ax.set_title(c, fontsize=9)
+            axes[0][0].set_ylabel("y (µm), mouth at 0")
+            fig.suptitle(f"Change from {BASELINE}, {label}, {view} view", fontsize=11)
+            fig.text(0.01, 0.002, NOTE, fontsize=7, style="italic")
+            fn = dest / f"diff_{key}_{view}.png"
+            fig.savefig(fn, dpi=110)
+            plt.close(fig)
+            print("wrote", fn)
 
 
 def profile_data(out):
@@ -148,17 +237,25 @@ def profiles(cases, outs, fn, plt):
 
 
 def main():
-    cases = sys.argv[1:] or ["M0_none"]
+    args = sys.argv[1:] or [BASELINE]
+    if args == ["--all"]:
+        args = sorted(p.parent.name for p in (HERE / "results").glob("*/summary.json")
+                      if not p.parent.name.endswith(("_test", "_discover")))
+        args.sort(key=lambda c: c != BASELINE)                    # baseline first
+        print("cases:", " ".join(args))
     plt, mtri, np = mpl()
-    outs = [HERE / "results" / c for c in cases]
-    for c, o in zip(cases, outs):
+    outs = [HERE / "results" / c for c in args]
+    for c, o in zip(args, outs):
         if not o.is_dir():
             raise SystemExit(f"no results/{c}")
         (o / "plots").mkdir(exist_ok=True)
         maps(c, o, plt, mtri, np)
         profiles([c], [o], o / "plots" / f"{c}_profiles.png", plt)
-    if len(cases) > 1:
-        profiles(cases, outs, HERE / "results" / "compare" / f"profiles_{'_'.join(cases)[:120]}.png", plt)
+    if len(args) > 1:
+        dest = HERE / "results" / "compare"
+        dest.mkdir(parents=True, exist_ok=True)
+        profiles(args, outs, dest / "profiles.png", plt)
+        compare_maps(args, outs, plt, mtri, np, dest)
 
 
 if __name__ == "__main__":
