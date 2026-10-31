@@ -130,7 +130,11 @@ def main():
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
         # allocate UDM/UDS storage before the UDF hooks are attached (Fluent calls them at once)
         api.first_ok("early initialization", lambda: s.solution.initialization.standard_initialize())
-        api.uds_diffusivity(solver, mat, [P.RHO_L * P.D[k] for k in ("OH", "SIL", "H2")])
+        # 24.1 applies ONE value to every UDS (M0_none 2026-10-30: all three diffused with uds-2's D_H2), so
+        # all get the LARGEST D (implicit, does the heavy lifting); etch.c face_source adds D_i - D_BASE <= 0
+        # as a deferred correction (a positive explicit remainder froze OH/H2: Jacobi-slow, job 24478379)
+        d_base = max(P.D[k] for k in ("OH", "SIL", "H2"))
+        api.uds_diffusivity(solver, mat, [P.RHO_L * d_base] * 3)
         # sources everywhere: reaction is zero away from poly-Si, D_osc mixing acts in the bulk too
         zones = [z for z in FLUID_ZONES if z in p["mesh_info"]["cell_zones"]]
         api.cell_sources(solver, zones, {0: f"src_oh::{api.UDF_LIB}", 1: f"src_sil::{api.UDF_LIB}",
