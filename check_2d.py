@@ -48,6 +48,7 @@ def main():
     print(f"{'depth um':>9} | {'N_OH 2D':>10} {'expected':>10} | {'N_SIL 2D':>10} {'expected':>10} | "
           f"{'N_H2 2D':>10} {'expected':>10} | {'current/F':>10} | {'E=S/Q 1/m':>10}")
     worst = {"OH": 0.0, "SIL": 0.0, "H2": 0.0}
+    diag = []
     step = max(1, len(zs) // 12)
     for a, b in list(zip(zs, zs[1:]))[::step]:
         zf = 0.5 * (a + b)
@@ -65,7 +66,21 @@ def main():
                 worst[s] = max(worst[s], abs(N[s] / exp[s] - 1))
         print(f"{zf * 1e6:9.3f} | {N['OH']:10.3e} {exp['OH']:10.3e} | {N['SIL']:10.3e} {exp['SIL']:10.3e} | "
               f"{N['H2']:10.3e} {exp['H2']:10.3e} | {cur:10.2e} | {S / Q:10.3e}")
+        # what would balance each species: (a) the diffusivity Fluent effectively used, with migration as
+        # coded; (b) the field each ion effectively felt, with D as intended
+        mig = {s: P.Z[s] * D[s] * m[s] * S / Q for s in ("OH", "SIL", "H2")}
+        d_eff = {s: (mig[s] - exp[s]) / g[s] if g[s] else float("nan") for s in mig}
+        e_eff = {s: (exp[s] + D[s] * g[s]) / (P.Z[s] * D[s] * m[s]) for s in ("OH", "SIL")}
+        diag.append((zf, m, d_eff, e_eff, N["TMA"]))
     print("largest relative flux mismatch: " + ", ".join(f"{s} {v * 100:.1f} %" for s, v in worst.items()))
+    print("\nIntended D: " + ", ".join(f"{s} {D[s]:.3e}" for s in ("OH", "SIL", "H2", "TMA")) + " m2/s")
+    print(f"{'depth um':>9} | {'c_OH':>7} {'c_SIL':>7} {'c_H2':>7} | {'D_eff OH':>9} {'D_eff SIL':>9} {'D_eff H2':>9} | "
+          f"{'E_eff OH':>9} {'E_eff SIL':>9} | {'N_TMA':>9}")
+    for zf, m, de, ee, nt in diag:
+        print(f"{zf * 1e6:9.3f} | {m['OH']:7.1f} {m['SIL']:7.1f} {m['H2']:7.1f} | {de['OH']:9.3e} {de['SIL']:9.3e} "
+              f"{de['H2']:9.3e} | {ee['OH']:9.3e} {ee['SIL']:9.3e} | {nt:9.2e}")
+    print("D_eff = diffusivity that balances the poly-Si consumption if migration is as coded; E_eff = field"
+          " each ion would need if D is as intended. N_TMA must be ~0 at steady state.")
     print("A few % is discretisation; tens of % in OH/SIL but not H2 points at the migration term.")
 
 
