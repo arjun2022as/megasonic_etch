@@ -40,7 +40,7 @@ function table(widths, header, rows) {
 const gap = () => new Paragraph({ spacing: { after: 80 }, children: [] });
 
 // Living document: inputs Claude needs from the user / Micron / ProSys / SEM to improve the Project 1 model.
-// Build:  NODE_PATH=<folder with node_modules/docx> node docs/make_inputs_doc.js <out.docx>
+// Build:  NODE_PATH=E:/claude_tools/node_modules node docs/make_inputs_doc.js <out.docx>   (docx kept on E: to spare C:)
 // Keep VERSION, the "received" log and the request tables current whenever an item is asked for or answered.
 const VERSION = "v1, 30 October 2026";
 
