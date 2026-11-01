@@ -237,6 +237,7 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
         cell_t cn;
         Thread *tn;
         real A[ND_ND], xn[ND_ND], dr[ND_ND], dn, geo, k, pf;
+        int pface;
         if (BOUNDARY_FACE_THREAD_P(tf))
             continue;
         if (F_C0(f, tf) == c && THREAD_T0(tf) == t) { cn = F_C1(f, tf); tn = THREAD_T1(tf); }
@@ -248,7 +249,8 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
         NV_VV(dr, =, xn, -, xc);
         geo = NV_DOT(A, A) / fabs(NV_DOT(A, dr));             /* grad c . A_out = (c_nb - c_c) geo */
         dn = C_UDMI(cn, tn, UDM_DOSC);
-        pf = (dp > 0.0 && fabs(A[1]) > fabs(A[0]) && in_pump(xc) && in_pump(xn)) ? dp : 0.0;
+        pface = BUB_TOP > 0.0 && fabs(A[1]) > fabs(A[0]) && in_pump(xc) && in_pump(xn);
+        pf = pface ? dp : 0.0;
         if (dc > 0.0 || dn > 0.0 || dm != 0.0 || pf > 0.0)   /* (a) mixing + molecular remainder + pumping */
         {
             k = RHO * (0.5 * (dc + dn) + dm + pf) * geo;
@@ -260,7 +262,9 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
         {
             real ohn = cell_c(cn, tn, 0), sin_ = cell_c(cn, tn, 1);
             real d_oh = (ohn - coh) * geo, d_si = (sin_ - csi) * geo;
-            real s_a = -D_OH * d_oh - 2.0 * D_SIL * d_si + D_TMA * (d_oh + 2.0 * d_si);
+            /* zero current includes the pumping dispersion of every ion (it moves charge too) */
+            real p_oh = pface ? DPUMP_OH : 0.0, p_si = pface ? DPUMP_SIL : 0.0, p_tma = pface ? DPUMP_TMA : 0.0;
+            real s_a = -(D_OH + p_oh) * d_oh - 2.0 * (D_SIL + p_si) * d_si + (D_TMA + p_tma) * (d_oh + 2.0 * d_si);
             real co = 0.5 * (coh + ohn), cs = 0.5 * (csi + sin_);
             real q = D_OH * MAX(co, 0.0) + 4.0 * D_SIL * MAX(cs, 0.0) + D_TMA * MAX(co + 2.0 * cs, 0.0);
             real cf = 0.5 * (ci + cell_c(cn, tn, i));

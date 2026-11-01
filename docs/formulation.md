@@ -149,6 +149,7 @@ At 90° the sound moves the liquid only along the wafer normal, so a slit full o
 - Gas pressure p_g = p_atm + 2γ/W − p_vap = 1.41 MPa (γ = 0.0662 N/m, ASSUMED for 5 wt% TMAH). p_a < p_g in every case: stable (non-inertial) pulsation, isothermal (κ = 1).
 - Lumped column per metre of slit: p_a = (R + i(ωM − K/ω)) Q, R = 12μz/W³, M = ρz/W, K = κp_g/(W l_b). Damping ratio 7–30: overdamped, no resonance; for deep bubbles the column's viscous resistance limits the motion.
 - Mixing: Taylor–Aris dispersion of the oscillating, quasi-steady Poiseuille flow (Watson 1983 method), closed form; checked against a finite-difference solution (0.0001 %) and the slow limit ½·(2/105)U²h²/D. It scales as 1/D, so silicate gains about 20× more than OH⁻ relative to its own diffusivity.
+- Zero current with pumping: the dispersion differs per ion, so on its own it would carry charge; the field balances it, S = Σ z_i (D_i + D_pump,i) ∇c_i over OH⁻, silicate and TMA⁺ (Q unchanged: dispersion does not conduct). Without this, check_2d.py on B_f1_I2_floor (2026-11-01) showed N_TMA ≈ −3×10⁻³ and the OH⁻ D_eff 4 % high. ASSUMED closure: ions disperse independently and couple only through the field.
 - ASSUMED: the bubble fills the slit width and seals the liquid below it (no wetting film); bubble size and depth until SEM shows voids. Transient (inertial) cavitation is not modelled.
 
 Results (results_1d/cavitation_table.csv, `python run_cavitation.py`), dispersion as % of each species' own D:

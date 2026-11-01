@@ -69,7 +69,7 @@ def main():
         g = {s: (prof[b][s] - prof[a][s]) / (b - a) for s in ("OH", "SIL", "H2")}
         m = {s: 0.5 * (prof[a][s] + prof[b][s]) for s in ("OH", "SIL", "H2")}
         g["TMA"], m["TMA"] = g["OH"] + 2 * g["SIL"], m["OH"] + 2 * m["SIL"]
-        S = sum(P.Z[i] * D[i] * g[i] for i in ("OH", "SIL", "TMA"))
+        S = sum(P.Z[i] * (D[i] + pump.get(i, 0.0)) * g[i] for i in ("OH", "SIL", "TMA"))
         Q = sum(P.Z[i] ** 2 * D[i] * max(m[i], 1e-12) for i in ("OH", "SIL", "TMA"))
         N = {s: -(D[s] + pump.get(s, 0.0)) * g[s] + P.Z[s] * D[s] * m[s] * S / Q for s in ("OH", "SIL", "H2", "TMA")}
         R = sum(s for zz, s in src if zz > zf) / W                    # mol Si / m2 of slit cross-section / s
