@@ -10,6 +10,7 @@ Megasonic-assisted TMAH wet etching of poly-Si, 100 nm x 10 um slit (AR 100), al
 | 2 | `make_contours.py <cases>`: slit + mouth maps (OH-, silicate, H2/sat, speed, D_osc) and depth profiles; needs field_*.csv from dump_field (runs after 2026-10-31) | PNGs in results/<case>/plots |
 | 3 | FLAT WAFER first (normal incidence, how tools normally run): frequency 1/2/3 MHz x power 0.5/1/2 W/cm2 at 90 deg | case-by-case results |
 | 4 | Then the ANGLE cases (A_*, F_*, P_* at 45 deg, R_*), then V_* checks | every case `done:` |
+| 4b | NEXT after the angle cases (user 2026-11-01): bubble-free window - conditions keeping H2 < 13.9x saturation everywhere (1D sweep of temperature, concentration, spin/flow, depth, pitch, gas, additives; then Fluent) | max H2/sat < 13.9 |
 | 5 | `analyze_2d.py` figures + verification.md; FINAL comparison contours of every condition: `python make_contours.py --all` (maps_<q>_<view>.png one colour scale, diff_<q>_<view>.png vs M0_none, profiles.png) | results/compare |
 
 Step 3 caveat: in the current model 90 deg gives u_t = 0, so A_f1_I2_t90 is IDENTICAL to M0_none (same
