@@ -56,6 +56,9 @@ def d_at(T_k, mu, d25):
 
 D = {k: d_at(T, MU_L, v) for k, v in D25.items()}
 H2_SAT = 0.70                # mol/m3, ASSUMED H2 solubility at 60 C, 1 atm (~0.78 mM at 25 C, falls slowly with T)
+GAMMA_60C = 0.0662           # N/m, water surface tension at 60 C (IAPWS); ASSUMED for 5 wt% TMAH
+P_VAP_60C = 19.946e3         # Pa, water vapour pressure at 60 C
+P_ATM = 101.325e3
 
 # ---------------------------------------------------------------- etch chemistry
 # Overall (Seidel et al., J. Electrochem. Soc. 137, 3612 (1990); same for TMAH):

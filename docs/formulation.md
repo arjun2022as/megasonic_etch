@@ -140,3 +140,23 @@ Check: a uniform liquid fraction ε reproduces the cosh solution with D → εD.
 - V: checks (no electromigration, first-order rate, mesh refined 2×).
 
 The 2D model resolves the mouth region: the oscillating Stokes flow over the slit, the steady spin shear, and the lateral recess pockets as the etch advances. It uses user-defined scalars for OH⁻, silicate and H₂ with the same Nernst–Planck / zero-current flux (DEFINE_UDS_FLUX) and a reaction-flux wall condition on poly-Si faces only. The 1D model is its reference.
+
+## Stable cavitation at normal incidence: H₂ bubble pumping (etchsim/cavitation.py)
+
+At 90° the sound moves the liquid only along the wafer normal, so a slit full of liquid just breathes by compression (~2 nm). A trapped H₂ bubble is a soft spring that pulsates under the acoustic pressure at the wafer and pumps the liquid column above it.
+
+- Acoustic pressure at the wafer p_a = |1 + R| √(2ρcI): 229 / 324 / 458 kPa at 0.5 / 1 / 2 W/cm². Wavelength ≫ slit, so the whole slit sees p_a.
+- Gas pressure p_g = p_atm + 2γ/W − p_vap = 1.41 MPa (γ = 0.0662 N/m, ASSUMED for 5 wt% TMAH). p_a < p_g in every case: stable (non-inertial) pulsation, isothermal (κ = 1).
+- Lumped column per metre of slit: p_a = (R + i(ωM − K/ω)) Q, R = 12μz/W³, M = ρz/W, K = κp_g/(W l_b). Damping ratio 7–30: overdamped, no resonance; for deep bubbles the column's viscous resistance limits the motion.
+- Mixing: Taylor–Aris dispersion of the oscillating, quasi-steady Poiseuille flow (Watson 1983 method), closed form; checked against a finite-difference solution (0.0001 %) and the slow limit ½·(2/105)U²h²/D. It scales as 1/D, so silicate gains about 20× more than OH⁻ relative to its own diffusivity.
+- ASSUMED: the bubble fills the slit width and seals the liquid below it (no wetting film); bubble size and depth until SEM shows voids. Transient (inertial) cavitation is not modelled.
+
+Results (results_1d/cavitation_table.csv, `python run_cavitation.py`), dispersion as % of each species' own D:
+
+| Bubble top / length | U (m/s) | OH⁻ | silicate | H₂ |
+|---|---|---|---|---|
+| 9 µm / 1 µm (at the floor) | 0.045–0.09 | 0.03–0.15 % | 0.2–3.1 % | 0.04–0.2 % |
+| 5 µm / 1 µm (mid-depth) | 0.08–0.16 | 0.1–0.5 % | 0.6–10 % | 0.1–0.7 % |
+| 1 µm / 1 µm (near the mouth) | 0.38–0.82 | 2.7–11 % | 16–220 % | 3.5–15 % |
+
+Lower frequency gives more mixing (same velocity, larger displacement); mixing grows in proportion to power. A bubble at the floor (where H₂ supersaturation is highest) barely mixes OH⁻; a bubble near the mouth mixes the liquid above it strongly but cuts off everything below it.

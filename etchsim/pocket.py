@@ -20,9 +20,7 @@ import numpy as np
 
 from . import props as P
 
-GAMMA_60C = 0.0662        # N/m, water surface tension at 60 C (IAPWS)
-P_VAP_60C = 19.946e3      # Pa, water vapour pressure at 60 C
-P_ATM = 101.325e3
+from .props import GAMMA_60C, P_ATM, P_VAP_60C  # noqa: E402,F401  (moved to props, kept importable here)
 
 
 def h_vector(c_oh, c_sil, D=None):
