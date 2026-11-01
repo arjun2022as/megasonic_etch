@@ -108,7 +108,8 @@ def panel(fig, ax, tri, v, label, log, view, np, vmin=None, vmax=None, cmap="vir
         vmin, vmax = float(v.min()), float(v.max())
     if vmax <= vmin:
         vmax = vmin + 1e-9 * max(1.0, abs(vmin))
-    levels = np.linspace(vmin, vmax, 31)
+    pad = 1e-6 * (vmax - vmin)                          # values exactly at the top level would be left blank
+    levels = np.linspace(vmin - pad, vmax + pad, 31)
     cs = ax.tricontourf(tri, np.clip(v, vmin, vmax), levels=levels, cmap=cmap)
     fig.colorbar(cs, ax=ax, shrink=0.8).set_label(label, fontsize=8)
     ax.set_xlim(x0, x1)
