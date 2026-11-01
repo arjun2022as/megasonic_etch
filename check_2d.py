@@ -54,6 +54,7 @@ def main():
     if b_top > 0:
         zs = [z for z in zs if z < b_top]
         src = [(z, s) for z, s in src if z < b_top]
+        print("H2 balance not checked: dissolved H2 also passes into the plug through its top meniscus")
         print(f"H2 plug top at {b_top * 1e6:g} um: checking only the liquid above it; pumping D: "
               + ", ".join(f"{k} {v:.3e}" for k, v in pump.items()))
     r_total = sum(s for _, s in src)
@@ -76,6 +77,8 @@ def main():
         exp = {"OH": 2 * R, "SIL": -R, "H2": -2 * R}
         cur = sum(P.Z[s] * N[s] for s in ("OH", "SIL", "TMA"))
         for s in worst:
+            if s == "H2" and b_top > 0:
+                continue
             if abs(exp[s]) > 1e-3 * 2 * r_total / W:
                 worst[s] = max(worst[s], abs(N[s] / exp[s] - 1))
         print(f"{zf * 1e6:9.3f} | {N['OH']:10.3e} {exp['OH']:10.3e} | {N['SIL']:10.3e} {exp['SIL']:10.3e} | "

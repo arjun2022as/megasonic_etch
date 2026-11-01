@@ -117,7 +117,7 @@ def main():
                               api.setv(fl[mat].viscosity.option, "constant"),
                               api.setv(fl[mat].viscosity.value, P.MU_L)))
         if a.discover:                      # each step separately, so one failure doesn't hide the rest
-            for label, fn in (("UDM", lambda: api.user_memory(solver, 9)),
+            for label, fn in (("UDM", lambda: api.user_memory(solver, 10)),
                               ("UDF", lambda: api.compile_load_udf(solver, out)),
                               ("UDS", lambda: api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}"))):
                 try:
@@ -126,7 +126,7 @@ def main():
                     api.log(f"DISCOVER {label} FAILED:", e)
             api.discover(solver, out / "discover.txt")
             return
-        api.user_memory(solver, 9)
+        api.user_memory(solver, 10)
         api.compile_load_udf(solver, out)
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
         # allocate UDM/UDS storage before the UDF hooks are attached (Fluent calls them at once)

@@ -23,6 +23,11 @@
  * sinusoidal oscillation (upper bound of oscillatory dispersion), used afterwards in face_source (interior + exterior cells, so both sides of a partition agree).
  *
  * UDM: 0 poly length/cell area  1-4 sums u, v, uu, vv  5 D_osc  6 mean speed  7 etch rate [m/s]  8 samples
+ *      9 sum over adjacent H2-plug faces of |A| / (distance x cell volume)  [1/m2]
+ *
+ * H2 plug (wall zone BUBBLE_ID): OH- and silicate cannot cross it; dissolved H2 passes into the gas, so the
+ * liquid at the meniscus is held at C_H2_BUB = H2_SAT p_gas / p_atm (Henry's law at the plug pressure).
+ * Added as the cell source -D_H2 (c - C_H2_BUB) |A| / (d V) in the adjacent cells; the plug keeps its size.
  */
 #include "udf.h"
 #include "etch_params.h"
@@ -36,6 +41,7 @@
 #define UDM_UMEAN 6
 #define UDM_RATE 7
 #define UDM_N 8
+#define UDM_BUB 9
 
 #if !RP_HOST
 static int accumulating = 0;
@@ -100,7 +106,34 @@ DEFINE_ON_DEMAND(init_poly_area)
     face_t f;
     real A[ND_ND], len = 0.0;
     int n = 0;
+    Thread *tf;
+    int nb = 0;
     zero_udm(d, UDM_AV, UDM_AV);
+    zero_udm(d, UDM_BUB, UDM_BUB);
+    thread_loop_f(tf, d)                                      /* H2 plug menisci, if this case has a plug */
+    {
+        if (THREAD_ID(tf) != BUBBLE_ID)
+            continue;
+        begin_f_loop(f, tf)
+        {
+            if (PRINCIPAL_FACE_P(f, tf))
+            {
+                cell_t c0 = F_C0(f, tf);
+                Thread *t0 = THREAD_T0(tf);
+                real xf[ND_ND], xc[ND_ND], dx[ND_ND], dist;
+                F_AREA(A, f, tf);
+                F_CENTROID(xf, f, tf);
+                C_CENTROID(xc, c0, t0);
+                NV_VV(dx, =, xf, -, xc);
+                dist = fabs(NV_DOT(dx, A)) / NV_MAG(A);
+                C_UDMI(c0, t0, UDM_BUB) += NV_MAG(A) / (dist * C_VOLUME(c0, t0));
+                nb++;
+            }
+        }
+        end_f_loop(f, tf)
+    }
+    nb = PRF_GISUM1(nb);
+    Message0("init_poly_area: %d H2-plug faces (held at %g mol/m3 H2)\n", nb, C_H2_BUB);
     begin_f_loop(f, tp)
     {
         if (PRINCIPAL_FACE_P(f, tp))
@@ -291,6 +324,12 @@ static real src(cell_t c, Thread *t, int i, real nu, real dS[], int eqn, int imp
         return 0.0;
     }
     s_mix = face_source(c, t, i, &ds_mix);
+    if (i == 2 && C_UDMI(c, t, UDM_BUB) > 0.0)               /* H2 into the adjacent gas plug */
+    {
+        real kb = D_H2 * C_UDMI(c, t, UDM_BUB);
+        s_mix -= kb * (cell_c(c, t, 2) - C_H2_BUB);
+        ds_mix -= kb * RHO;
+    }
     av = C_UDMI(c, t, UDM_AV);
     if (av <= 0.0)
     {
