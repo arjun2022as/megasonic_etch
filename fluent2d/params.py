@@ -136,7 +136,7 @@ def header(p):
     n_poly = mesh2d.wet_poly_layers(P.L_SLIT, P.LAYER, m["bubble_top"], m["bubble_len"])
     vals = dict(RHO=P.RHO_L, CB=P.C_BULK, D_OH=P.D["OH"], D_SIL=P.D["SIL"], D_TMA=P.D["TMA"], D_H2=P.D["H2"],
                 D_BASE=max(P.D[k] for k in ("OH", "SIL", "H2")),
-                K_SI=P.si_flux(p["er_ref"]), ORDER=p["order"], EPS=1e-6, OMEGA=p["omega"],
+                K_SI=P.si_flux(p["er_ref"]), ORDER=p["order"], EPS=1e-6, OMEGA_AC=p["omega"],
                 OSC_SCALE=p["osc_scale"], M_SI=P.M_SI, RHO_SI=P.RHO_SI,
                 POLY_LENGTH=2 * n_poly * P.LAYER, W_SLIT=P.W_SLIT, DX_CELL=p["mesh"]["dx"],
                 BUB_TOP=m["bubble_top"] if m["bubble_len"] > 0 else 0.0,

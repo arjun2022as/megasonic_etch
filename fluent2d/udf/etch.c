@@ -19,7 +19,7 @@
  *   source_i = nu_i r (poly face length / cell area),  nu = (-2, +1, +2)
  *
  * Megasonic mixing: while the oscillating flow runs, accumulate_now (called after every time step by
- * run_case.py) sums u, v, u^2, v^2; finish_avg sets D_osc = OSC_SCALE (var_u + var_v) / OMEGA, i.e. |u1|^2 / (2 omega) for a
+ * run_case.py) sums u, v, u^2, v^2; finish_avg sets D_osc = OSC_SCALE (var_u + var_v) / OMEGA_AC, i.e. |u1|^2 / (2 omega) for a
  * sinusoidal oscillation (upper bound of oscillatory dispersion), used afterwards in face_source (interior + exterior cells, so both sides of a partition agree).
  *
  * UDM: 0 poly length/cell area  1-4 sums u, v, uu, vv  5 D_osc  6 mean speed  7 etch rate [m/s]  8 samples
@@ -112,7 +112,8 @@ DEFINE_ON_DEMAND(init_poly_area)
     zero_udm(d, UDM_BUB, UDM_BUB);
     thread_loop_f(tf, d)                                      /* H2 plug menisci, if this case has a plug */
     {
-        if (THREAD_ID(tf) != BUBBLE_ID)
+        if (THREAD_ID(tf) != BUBBLE_ID || !BOUNDARY_FACE_THREAD_P(tf) || BUB_TOP <= 0.0)  /* Fluent may give an
+            interior zone (e.g. slit-bulk faces) id 12 in meshes without a plug */
             continue;
         begin_f_loop(f, tf)
         {
@@ -181,7 +182,7 @@ DEFINE_ON_DEMAND(finish_avg)
                 real mu = C_UDMI(c, t, UDM_SU) / n, mv = C_UDMI(c, t, UDM_SV) / n;
                 real vu = MAX(C_UDMI(c, t, UDM_SUU) / n - mu * mu, 0.0);
                 real vv = MAX(C_UDMI(c, t, UDM_SVV) / n - mv * mv, 0.0);
-                C_UDMI(c, t, UDM_DOSC) = OSC_SCALE * (vu + vv) / OMEGA;
+                C_UDMI(c, t, UDM_DOSC) = OSC_SCALE * (vu + vv) / OMEGA_AC;
                 C_UDMI(c, t, UDM_UMEAN) = sqrt(mu * mu + mv * mv);
                 dmax = MAX(dmax, C_UDMI(c, t, UDM_DOSC));
                 umax = MAX(umax, C_UDMI(c, t, UDM_UMEAN));
