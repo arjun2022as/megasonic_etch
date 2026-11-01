@@ -45,11 +45,14 @@ def rows():
 
 
 def bubble_rows():
+    """1 um plugs (B0_floor ...) and 200 nm, nucleus-sized plugs (B0_floor_l200 ...); 'floor' = touching it."""
     out = []
-    for where, top in (("floor", 9), ("mid", 5), ("mouth", 1)):
-        out.append(row(f"B0_{where}", f"H2 plug 1 um, top {top} um below the mouth, no sound", bubble=(top, 1)))
-        out.append(row(f"B_f1_I2_{where}", f"H2 plug 1 um, top {top} um, 1 MHz 2 W/cm2 at 90 deg (stable cavitation)",
-                       1, 2, 90, bubble=(top, 1)))
+    for length, tag in ((1, ""), (0.2, "_l200")):
+        for where, top in (("floor", round(10 - length, 3)), ("mid", 5), ("mouth", 1)):
+            out.append(row(f"B0_{where}{tag}", f"H2 plug {length:g} um, top {top:g} um below the mouth, no sound",
+                           bubble=(top, length)))
+            out.append(row(f"B_f1_I2_{where}{tag}", f"H2 plug {length:g} um, top {top:g} um, 1 MHz 2 W/cm2 at 90 deg "
+                           "(stable cavitation)", 1, 2, 90, bubble=(top, length)))
     return out
 
 
