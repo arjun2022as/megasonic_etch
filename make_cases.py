@@ -8,17 +8,22 @@ All cases: 5 wt% TMAH, 60 C, slit 100 nm x 10 um, SiO2/poly-Si 50/50 nm, MegPie 
   P    power: 0.5 and 1 W/cm2 at 1 MHz, 45 deg
   R    poly-Si already recessed 300 nm: no megasonic, and 1 MHz 2 W/cm2 45 deg
   V    checks: no electromigration, rate order 1, mesh refined 2x
+  B    H2 gas plug 1 um long in the slit (top at 9 um = on the floor, 5 um = mid-depth, 1 um = near the mouth),
+       flat wafer (90 deg): B0_* without sound (blocking only), B_f1_I2_* with 1 MHz, 2 W/cm2 (blocking + stable-
+       cavitation pumping, etchsim/cavitation.py)
 """
 import csv
 from pathlib import Path
 
 COLS = ["case", "walltime", "f_MHz", "I_W_cm2", "theta_deg", "recess_nm", "order", "migration", "er_ref_nm_min",
-        "refine", "osc_scale", "iters", "note"]
+        "refine", "osc_scale", "iters", "bubble_top_um", "bubble_len_um", "note"]
 
 
-def row(case, note, f=0, I=0, theta=90, recess=0, order="", migration=1, refine=1, walltime="04:00:00"):
+def row(case, note, f=0, I=0, theta=90, recess=0, order="", migration=1, refine=1, walltime="04:00:00",
+        bubble=("", "")):
     return dict(case=case, walltime=walltime, f_MHz=f, I_W_cm2=I, theta_deg=theta, recess_nm=recess, order=order,
-                migration=migration, er_ref_nm_min="", refine=refine, osc_scale=1, iters=20, note=note)
+                migration=migration, er_ref_nm_min="", refine=refine, osc_scale=1, iters=20, bubble_top_um=bubble[0],
+                bubble_len_um=bubble[1], note=note)
 
 
 def rows():
@@ -35,6 +40,16 @@ def rows():
     out.append(row("V_nomig", "check: electromigration off", migration=0))
     out.append(row("V_order1", "check: first-order rate in OH-", order=1.0))
     out.append(row("V_mesh2", "check: cells refined 2x (no megasonic)", refine=2, walltime="10:00:00"))
+    out += bubble_rows()
+    return out
+
+
+def bubble_rows():
+    out = []
+    for where, top in (("floor", 9), ("mid", 5), ("mouth", 1)):
+        out.append(row(f"B0_{where}", f"H2 plug 1 um, top {top} um below the mouth, no sound", bubble=(top, 1)))
+        out.append(row(f"B_f1_I2_{where}", f"H2 plug 1 um, top {top} um, 1 MHz 2 W/cm2 at 90 deg (stable cavitation)",
+                       1, 2, 90, bubble=(top, 1)))
     return out
 
 

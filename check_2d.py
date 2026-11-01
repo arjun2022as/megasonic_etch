@@ -9,7 +9,10 @@ the poly-Si below z consumes or releases (Si + 2 OH- -> silicate + 2 H2):
 The fluxes are rebuilt from the centre-column profile with the same Nernst-Planck formula as the 1D model
 (etchsim/slit1d.py): N = -D dc/dz + z D c S/Q. H2 (neutral) checks diffusion + reaction; OH- and silicate
 check the electromigration term in etch.c face_source. The net current sum z_i N_i must be ~0.
+Bubble cases: only the liquid between the mouth and the top of the H2 plug is checked (the liquid below a
+plug is sealed and not quasi-steady), with the pumping dispersion D_pump added to each species.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -42,6 +45,17 @@ def main():
     ys = sorted({round(-r["y"], 12) for r in poly})
     dy = min(b - a for a, b in zip(ys, ys[1:]) if b - a > 1e-12)
     src = [(-r["y"], P.si_flux(r["etch_m_s"]) * dy) for r in poly]   # mol Si / s per m of depth, per cell
+    try:
+        summ = json.loads((out / "summary.json").read_text())
+        b_top = float(summ["mesh"].get("bubble_top", 0.0)) if float(summ["mesh"].get("bubble_len", 0.0)) > 0 else 0.0
+        pump = {k: float(v) for k, v in summ.get("pump", {}).get("D", {}).items()}
+    except (OSError, KeyError, ValueError):
+        b_top, pump = 0.0, {}
+    if b_top > 0:
+        zs = [z for z in zs if z < b_top]
+        src = [(z, s) for z, s in src if z < b_top]
+        print(f"H2 plug top at {b_top * 1e6:g} um: checking only the liquid above it; pumping D: "
+              + ", ".join(f"{k} {v:.3e}" for k, v in pump.items()))
     r_total = sum(s for _, s in src)
     print(f"case {case}: {len(zs)} centre rows, {len(poly)} poly cells, dy = {dy * 1e9:.2f} nm, "
           f"total Si {r_total:.4e} mol/s/m")
@@ -57,7 +71,7 @@ def main():
         g["TMA"], m["TMA"] = g["OH"] + 2 * g["SIL"], m["OH"] + 2 * m["SIL"]
         S = sum(P.Z[i] * D[i] * g[i] for i in ("OH", "SIL", "TMA"))
         Q = sum(P.Z[i] ** 2 * D[i] * max(m[i], 1e-12) for i in ("OH", "SIL", "TMA"))
-        N = {s: -D[s] * g[s] + P.Z[s] * D[s] * m[s] * S / Q for s in ("OH", "SIL", "H2", "TMA")}
+        N = {s: -(D[s] + pump.get(s, 0.0)) * g[s] + P.Z[s] * D[s] * m[s] * S / Q for s in ("OH", "SIL", "H2", "TMA")}
         R = sum(s for zz, s in src if zz > zf) / W                    # mol Si / m2 of slit cross-section / s
         exp = {"OH": 2 * R, "SIL": -R, "H2": -2 * R}
         cur = sum(P.Z[s] * N[s] for s in ("OH", "SIL", "TMA"))

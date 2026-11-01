@@ -44,17 +44,20 @@ def mpl():
     return plt, mtri, np
 
 
-def recess_of(out):
+def geometry_of(out):
+    """(recess, bubble top, bubble length) in m from summary.json."""
     try:
-        return float(json.loads((out / "summary.json").read_text())["mesh"]["recess"])
+        m = json.loads((out / "summary.json").read_text())["mesh"]
+        return float(m["recess"]), float(m.get("bubble_top", 0.0)), float(m.get("bubble_len", 0.0))
     except (OSError, KeyError, ValueError):
-        return 0.0
+        return 0.0, 0.0, 0.0
 
 
-def fluid(x, y, recess, np):
-    """True where a point lies in liquid: above the wafer, inside the slit, or inside a poly-Si pocket."""
+def fluid(x, y, geom, np):
+    """True where a point lies in liquid: above the wafer, inside the slit (not in an H2 plug), or in a pocket."""
     W, L, lay = P.W_SLIT, P.L_SLIT, P.LAYER
-    in_slit = (x >= 0) & (x <= W) & (y >= -L)
+    recess, b_top, b_len = geom
+    in_slit = (x >= 0) & (x <= W) & (y >= -L) & ~((b_len > 0) & (y < -b_top) & (y > -(b_top + b_len)))
     k = np.floor(-y / lay)
     in_pocket = (recess > 0) & (y < 0) & (y >= -L) & (k % 2 == 1) & (x >= -recess) & (x <= W + recess)
     return (y >= 0) | in_slit | in_pocket
@@ -70,7 +73,7 @@ def load_field(out, np):
         return None
     rows.sort(key=lambda r: (round(r["y"], 12), round(r["x"], 12)))
     a = {k: np.array([r[k] for r in rows]) for k in rows[0]}
-    a["recess"] = recess_of(out)
+    a["geom"] = geometry_of(out)
     a["osc"] = a["d_osc"].max() > 0
     return a
 
@@ -92,7 +95,7 @@ def view_tri(a, view, mtri, np):
     tri = mtri.Triangulation(xs[sel], ys[sel])
     cx = xs[sel][tri.triangles].mean(axis=1) * 1e-9
     cy = ys[sel][tri.triangles].mean(axis=1) * 1e-6
-    tri.set_mask(~fluid(cx, cy, a["recess"], np))
+    tri.set_mask(~fluid(cx, cy, a["geom"], np))
     return tri, sel
 
 
@@ -174,7 +177,7 @@ def compare_maps(cases, outs, plt, mtri, np, dest):
             if base is None or key in ("dosc", "speed"):
                 continue
             bq = {k: v for k, _, v, _ in quantities(base, np)}[key]
-            diffs = [(c, a, v - bq, tri, s) for c, a, v, tri, s in sels
+            diffs = [(c, a, v - bq, tri, s) for c, a, v, tri, s in sels  # same mesh: no plug, or the same plug
                      if c != BASELINE and a["x"].shape == base["x"].shape and np.allclose(a["x"], base["x"])
                      and np.allclose(a["y"], base["y"])]
             if not diffs:

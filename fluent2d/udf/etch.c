@@ -204,6 +204,8 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
  *      D (OH-), and the remainder (<= 0) is a deferred correction here: lagged neighbours, converging by a
  *      factor |D_i - D_BASE|/D_BASE (0.83 silicate, 0.15 H2) per iteration. A positive remainder with
  *      D_BASE = smallest D froze OH- and H2 (explicit neighbours dominate -> Jacobi, ~N^2 iterations);
+ *      plus, above a pulsating H2 plug, the pumping dispersion D_pump,i (etchsim/cavitation.py, Taylor-Aris
+ *      of the oscillating column) on the axial (horizontal) faces of the slit only;
  *  (b) electromigration, ions only: outward flux J = z_i D_i c_f (S.A_out)/Q_f [mol/s per m depth],
  *      S.A_out = sum_j z_j D_j (c_j,nb - c_j,c) A.A/|A.dr|, Q_f = sum_j z_j^2 D_j c_j,f,
  *      c_f = mean of the two cells (central; migration is diffusion-like, cell Peclet << 1).
@@ -211,6 +213,12 @@ DEFINE_UDS_FLUX(uds_flux, f, t, i)
  * partitions (exterior-cell UDS values are synced by Fluent; D_osc is set in exterior cells too).
  * Exact on this orthogonal Cartesian mesh. Interior faces only: ASSUMED no mixing or migration flux through
  * inlet/outlet/top (far from the slit, uniform specified values) and none through walls. */
+/* slit liquid between the mouth and the top of the H2 plug, where the pulsating bubble pumps (BUB_TOP = 0: none) */
+static int in_pump(const real *x)
+{
+    return BUB_TOP > 0.0 && x[0] > 0.0 && x[0] < W_SLIT && x[1] < 0.0 && x[1] > -BUB_TOP;
+}
+
 static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
 {
     int n;
@@ -218,6 +226,7 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
     real zi = (i == 0) ? -1.0 : (i == 1) ? -2.0 : 0.0;
     real Di = (i == 0) ? D_OH : (i == 1) ? D_SIL : D_H2;
     real dm = Di - D_BASE;                                    /* molecular D not carried by Fluent */
+    real dp = (i == 0) ? DPUMP_OH : (i == 1) ? DPUMP_SIL : DPUMP_H2;  /* bubble pumping (axial faces) */
     real coh = cell_c(c, t, 0), csi = cell_c(c, t, 1), ci = cell_c(c, t, i);
     int migrate = MIGRATION && zi != 0.0;
     C_CENTROID(xc, c, t);
@@ -227,7 +236,7 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
         Thread *tf = C_FACE_THREAD(c, t, n);
         cell_t cn;
         Thread *tn;
-        real A[ND_ND], xn[ND_ND], dr[ND_ND], dn, geo, k;
+        real A[ND_ND], xn[ND_ND], dr[ND_ND], dn, geo, k, pf;
         if (BOUNDARY_FACE_THREAD_P(tf))
             continue;
         if (F_C0(f, tf) == c && THREAD_T0(tf) == t) { cn = F_C1(f, tf); tn = THREAD_T1(tf); }
@@ -239,9 +248,10 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
         NV_VV(dr, =, xn, -, xc);
         geo = NV_DOT(A, A) / fabs(NV_DOT(A, dr));             /* grad c . A_out = (c_nb - c_c) geo */
         dn = C_UDMI(cn, tn, UDM_DOSC);
-        if (dc > 0.0 || dn > 0.0 || dm != 0.0)                /* (a) mixing + molecular remainder */
+        pf = (dp > 0.0 && fabs(A[1]) > fabs(A[0]) && in_pump(xc) && in_pump(xn)) ? dp : 0.0;
+        if (dc > 0.0 || dn > 0.0 || dm != 0.0 || pf > 0.0)   /* (a) mixing + molecular remainder + pumping */
         {
-            k = RHO * (0.5 * (dc + dn) + dm) * geo;
+            k = RHO * (0.5 * (dc + dn) + dm + pf) * geo;
             s += k * (C_UDSI(cn, tn, i) - C_UDSI(c, t, i));
             if (k > 0.0)
                 diag -= k;                                    /* implicit part only where it stabilises */

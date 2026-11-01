@@ -44,7 +44,7 @@ def read_dumps(out):
 def metrics(poly, centre):
     """Per poly-Si layer etch rate (both sides averaged), top/bottom, and the centre-column profile."""
     layers = {}
-    for r in poly:
+    for r in poly:                                  # layers under an H2 plug are absent (dry, not etched)
         k = int(-r["y"] // P.LAYER)
         layers.setdefault(k, []).append(r["etch_m_s"])
     ks = sorted(layers)
@@ -52,7 +52,8 @@ def metrics(poly, centre):
     n5 = max(1, len(er) // 20)
     top, bot = sum(er[:n5]) / n5, sum(er[-n5:]) / n5
     cen = sorted((r for r in centre if r["y"] < 0), key=lambda r: -r["y"])
-    return dict(n_poly_layers=len(ks), er_top_nm_min=top * 6e10, er_bottom_nm_min=bot * 6e10,
+    return dict(n_poly_layers=len(ks), n_dry_layers=round(P.L_SLIT / P.LAYER) // 2 - len(ks),
+                er_top_nm_min=top * 6e10, er_bottom_nm_min=bot * 6e10,
                 uniformity=bot / top if top > 0 else float("nan"),
                 er_mean_nm_min=sum(er) / len(er) * 6e10 if er else float("nan"),
                 c_oh_bottom=cen[-1]["c_oh"] if cen else float("nan"),
@@ -187,7 +188,8 @@ def main():
             hist.append(dict(t_B=t_sim, dt=dt, **{k: v for k, v in m.items() if k != "layers"}))
             api.log(f"phase B t = {t_sim:.4g} s: etch top {m['er_top_nm_min']:.2f} bottom {m['er_bottom_nm_min']:.2f} "
                     f"nm/min, bottom/top {m['uniformity']:.4f}, c_OH mouth {m['c_oh_mouth']:.1f} bottom "
-                    f"{m['c_oh_bottom']:.1f}, c_SIL bottom {m['c_sil_bottom']:.1f}, c_H2 bottom {m['c_h2_bottom']:.1f}")
+                    f"{m['c_oh_bottom']:.1f}, c_SIL bottom {m['c_sil_bottom']:.1f}, c_H2 bottom {m['c_h2_bottom']:.1f}"
+                    + (f", dry layers {m['n_dry_layers']}" if m["n_dry_layers"] else ""))
         api.on_demand(solver, "report")
         api.on_demand(solver, "dump")
         api.on_demand(solver, "dump_field")                 # whole field for make_contours.py
