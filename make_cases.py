@@ -41,6 +41,7 @@ def rows():
     out.append(row("V_order1", "check: first-order rate in OH-", order=1.0))
     out.append(row("V_mesh2", "check: cells refined 2x (no megasonic)", refine=2, walltime="10:00:00"))
     out += bubble_rows()
+    out += angle_bubble_rows()
     return out
 
 
@@ -54,6 +55,13 @@ def bubble_rows():
             out.append(row(f"B_f1_I2_{where}{tag}", f"H2 plug {length:g} um, top {top:g} um, 1 MHz 2 W/cm2 at 90 deg "
                            "(stable cavitation)", 1, 2, 90, bubble=(top, length)))
     return out
+
+
+def angle_bubble_rows():
+    """1 um H2 plug on the floor with sound at 60 / 45 / 15 deg (1 MHz, 2 W/cm2): how the oscillating flow at the
+    mouth and the plug pulsation change the H2 flow into the plug (its growth rate) vs B0_floor / B_f1_I2_floor."""
+    return [row(f"BA_f1_I2_t{th}_floor", f"H2 plug 1 um on the floor, 1 MHz 2 W/cm2 at {th} deg", 1, 2, th, bubble=(9, 1))
+            for th in (60, 45, 15)]
 
 
 if __name__ == "__main__":

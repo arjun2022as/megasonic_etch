@@ -448,6 +448,7 @@ DEFINE_ON_DEMAND(report)
     Thread *t;
     cell_t c;
     real cmin = 1e30, cmax = -1e30, smax = 0.0, h2max = 0.0, rmax = 0.0, rmin = 1e30;
+    real h2_in = 0.0;                                         /* H2 into a gas plug [mol/s per m] */
     thread_loop_c(t, d)
     {
         begin_c_loop_int(c, t)
@@ -457,6 +458,8 @@ DEFINE_ON_DEMAND(report)
             cmax = MAX(cmax, co);
             smax = MAX(smax, cell_c(c, t, 1));
             h2max = MAX(h2max, cell_c(c, t, 2));
+            if (C_UDMI(c, t, UDM_BUB) > 0.0)
+                h2_in += D_H2 * C_UDMI(c, t, UDM_BUB) * (cell_c(c, t, 2) - C_H2_BUB) * C_VOLUME(c, t);
             if (C_UDMI(c, t, UDM_AV) > 0.0)
             {
                 real r = rate_si(co) * M_SI / RHO_SI;
@@ -471,5 +474,9 @@ DEFINE_ON_DEMAND(report)
     h2max = PRF_GRHIGH1(h2max); rmax = PRF_GRHIGH1(rmax); rmin = PRF_GRLOW1(rmin);
     Message0("REPORT c_OH_min %g c_OH_max %g c_SIL_max %g c_H2_max %g etch_min_nm_min %g etch_max_nm_min %g\n",
              cmin, cmax, smax, h2max, rmin * 6e10, rmax * 6e10);
+    h2_in = PRF_GRSUM1(h2_in);
+    if (BUB_TOP > 0.0)                                        /* plug lengthens at h2_in / (gas density x W) */
+        Message0("PLUG H2_in %g mol/s/m growth %g um/s
+", h2_in, h2_in / (RHO_GAS_PLUG * W_SLIT) * 1e6);
 #endif
 }
