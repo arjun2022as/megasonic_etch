@@ -30,8 +30,9 @@ BC = {"interior": 2, "wall": 3, "pressure-outlet": 5, "velocity-inlet": 10}
 CELL_ZONES = [(2, "bulk"), (3, "slit"), (4, "pocket")]
 FACE_ZONES = [(5, "interior", "interior"), (6, "inlet", "velocity-inlet"), (7, "outlet", "pressure-outlet"),
               (8, "top", "velocity-inlet"), (9, "wafer-top", "wall"), (10, "oxide", "wall"), (11, "poly", "wall"),
-              (12, "bubble", "wall")]
-POLY_ID, OXIDE_ID, BUBBLE_ID = 11, 10, 12
+              (12, "bubble", "wall"), (13, "bubble-pocket", "wall")]
+POLY_ID, OXIDE_ID, BUBBLE_ID, BUBBLE_POCKET_ID = 11, 10, 12, 13   # pocket mouths facing a plug get their own zone:
+# Fluent splits a wall zone that borders two cell zones (slit, pocket) and renumbers the second part
 
 
 def in_bubble(y0, y1, bubble_top, bubble_len, tol=1e-12):
@@ -153,7 +154,7 @@ def build(W, L, layer, R, pitch, H, dx, dy, dy_top0, ratio, bubble_top=0.0, bubb
             zones[BUBBLE_ID].append(f)
         elif (bubble_len > 0 and R > 0 and abs(xa - xb) < tol and (abs(xm) < tol or abs(xm - W) < tol)
               and -(bubble_top + bubble_len) < ym < -bubble_top):   # pocket mouth facing the plug
-            zones[BUBBLE_ID].append(f)
+            zones[BUBBLE_POCKET_ID].append(f)
         elif abs(xa - xb) < tol and poly_layer(ym):          # vertical wall in a poly-Si layer
             zones[POLY_ID].append(f)
         else:
@@ -185,8 +186,8 @@ def check(nodes, cells, xs, ys, zones, W, L, layer, R, H, X0, X1, bubble_top=0.0
     want = {6: H, 7: H, 8: X1 - X0, 9: (X1 - X0) - W, POLY_ID: 2 * n_wet * layer}
     if bubble_len > 0:
         want[BUBBLE_ID] = W * (1 if bubble_top + bubble_len >= L * (1 - 1e-12) else 2)
-        if R > 0:                                                    # + both pocket mouths per sealed layer
-            want[BUBBLE_ID] += 2 * layer * len(sealed_poly_layers(L, layer, bubble_top, bubble_len))
+        if R > 0:                                                    # both pocket mouths per sealed layer
+            want[BUBBLE_POCKET_ID] = 2 * layer * len(sealed_poly_layers(L, layer, bubble_top, bubble_len))
     for zid, v in want.items():
         if abs(length(zid) - v) > 1e-6 * v:
             raise RuntimeError(f"zone {zid} length {length(zid)} != {v}")
@@ -250,7 +251,7 @@ def main(argv=None):
                                                    f"bubble={a.bubble_top:g}+{a.bubble_len:g}")
     info = dict(n_cells=len(cells), n_nodes=len(nodes), cell_zones=czones, poly_faces=len(zones[POLY_ID]),
                 X0=ext["X0"], X1=ext["X1"], H=a.H, W=a.W, L=a.L, recess=a.recess, dx=a.dx, dy=a.dy,
-                bubble_top=a.bubble_top, bubble_len=a.bubble_len, bubble_faces=len(zones[BUBBLE_ID]))
+                bubble_top=a.bubble_top, bubble_len=a.bubble_len, bubble_faces=len(zones[BUBBLE_ID]) + len(zones[BUBBLE_POCKET_ID]))
     print(json.dumps(info))
     return info
 

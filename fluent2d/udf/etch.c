@@ -112,8 +112,9 @@ DEFINE_ON_DEMAND(init_poly_area)
     zero_udm(d, UDM_BUB, UDM_BUB);
     thread_loop_f(tf, d)                                      /* H2 plug menisci, if this case has a plug */
     {
-        if (THREAD_ID(tf) != BUBBLE_ID || !BOUNDARY_FACE_THREAD_P(tf) || BUB_TOP <= 0.0)  /* Fluent may give an
-            interior zone (e.g. slit-bulk faces) id 12 in meshes without a plug */
+        if ((THREAD_ID(tf) != BUBBLE_ID && THREAD_ID(tf) != BUBBLE_POCKET_ID) || !BOUNDARY_FACE_THREAD_P(tf)
+            || BUB_TOP <= 0.0)          /* Fluent may give an interior zone (e.g. slit-bulk faces) id 12 or 13 in
+                                           meshes without a plug; 13 = pocket mouths beside a plug (comb walls) */
             continue;
         begin_f_loop(f, tf)
         {

@@ -31,7 +31,7 @@ def test_header_defines_every_constant_the_udf_uses():
     p = plan(load_case("M0_none"))
     h = header(p)
     used = {"RHO", "CB", "D_OH", "D_SIL", "D_TMA", "D_H2", "K_SI", "ORDER", "EPS", "OMEGA_AC", "OSC_SCALE", "M_SI",
-            "RHO_SI", "POLY_LENGTH", "W_SLIT", "DX_CELL", "MIGRATION", "POLY_ID"}
+            "RHO_SI", "POLY_LENGTH", "W_SLIT", "DX_CELL", "MIGRATION", "POLY_ID", "BUBBLE_ID", "BUBBLE_POCKET_ID"}
     for name in used:
         assert re.search(rf"\b{name}\b", UDF), name
         assert f"#define {name} " in h, name

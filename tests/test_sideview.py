@@ -63,4 +63,5 @@ def test_comb_mesh_with_plug():
     sealed = mesh2d.sealed_poly_layers(L, layer, 9e-6, 1e-6)
     assert len(sealed) == 10
     assert len(zones[mesh2d.POLY_ID]) == 2 * 100 * 5           # 100 poly layers, 2 sides, 5 rows each
-    assert len(zones[mesh2d.BUBBLE_ID]) == 20 + 2 * 10 * 5      # plug top (20 cells across W) + pocket mouths
+    assert len(zones[mesh2d.BUBBLE_ID]) == 20                   # plug top (20 cells across W)
+    assert len(zones[mesh2d.BUBBLE_POCKET_ID]) == 2 * 10 * 5     # pocket mouths: own zone (Fluent splits mixed zones)
