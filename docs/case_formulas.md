@@ -36,7 +36,7 @@ Everything in table 1, plus:
 | Bubble pumping (lumped column) | p_a = (R + i(ωM − K/ω)) Q, R = 12μz/W³, M = ρz/W, K = κ p_g/(W l_b) | overdamped (ratio 7–30); viscous-limited when deep |
 | Mixing from pumping | Taylor–Aris oscillatory dispersion: iωg − D g'' = −u′(x), D_pump = −½ Re⟨u′ g*⟩; slow limit ½·(2/105) U² h²/D | per species, ~1/D: silicate gains most |
 | Zero current with pumping | S = Σ z_i (D_i + D_pump,i) ∇c_i | dispersion does not conduct (Q unchanged) |
-| Status | B0_* (no sound) valid; **B_f1_I2_* (with sound) unreliable in 2D** | 1D: real gain ≈ 1–2 % less non-uniformity |
+| Status | B0_* (no sound) valid; B_f1_I2_* (with sound) had NOT settled at 0.305 s (0.9730 → 0.9675 and still falling): the apparent gain was a transient. Runs now continue until settled; rerun pending | 1D: real gain ≈ +0.0004 in bottom/top |
 
 ## 3. A cases: angle of incidence, 1 MHz, 2 W/cm², no bubble
 
@@ -54,4 +54,5 @@ Everything in table 1, plus:
 | Mixing coefficient | D_osc = (var u + var v)/ω = \|u₁\|²/(2ω) (upper bound), same for every species | from 10 averaged cycles |
 | Time, phase A | Δt = 1/(40 f) = 25 ns; 8 settle + 10 averaged cycles | then phase B as in table 1 |
 | Mouth supply | 1D wafer-level model with the extra megasonic mixing | higher mouth OH⁻ than M0 |
-| Status | first run had two bugs (H₂ pinned by a zone-id clash; suspected OMEGA name clash); **rerun pending** | first look: bottom/top 0.9571–0.9574 vs 0.9576 |
+| Results (rerun, 2026-11-01) | bottom/top t75 0.95718, t60 0.95713, t45 0.95725, t30 0.95740, t15 0.95738 (M0 0.95758); top rate 293.3–295.0 nm/min (M0 292.4) | faster overall, uniformity unchanged |
+| Status | H₂ zone-id bug fixed (H₂ now rises with depth); OMEGA rename changed nothing. Settled (history flat), but the cell balance (residual_2d.py) still shows OH⁻ −6…−11 % and H₂ +4…+8 % off in A_t45, silicate exact: **small steady error, cause open** | conclusion (no uniformity gain) not affected |

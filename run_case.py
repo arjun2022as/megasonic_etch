@@ -29,6 +29,7 @@ from fluent2d.params import header, load_case, mesh_argv, plan  # noqa: E402
 from etchsim import props as P  # noqa: E402
 
 FLUID_ZONES = ("bulk", "slit", "pocket")
+MAX_EXTRA_BLOCKS = 20          # up to 1 s more of phase B (50 ms blocks) until quasi-steady
 
 
 def read_dumps(out):
@@ -178,7 +179,19 @@ def main():
             api.on_demand(solver, "finish_avg")
         ne["amp"] = {"definition": "0"}
         t_sim = 0.0
-        for dt, n in p["phase_B"]:
+        def stages():
+            yield from p["phase_B"]
+            # keep going in 50 ms blocks until bottom/top and the bottom OH- stop changing (a run that is still
+            # settling, like B_f1_I2_floor on 2026-11-01, otherwise reports a transient as a result)
+            for _ in range(0 if a.setup_only else MAX_EXTRA_BLOCKS):
+                h0, h1 = hist[-2], hist[-1]
+                if (abs(h1["uniformity"] - h0["uniformity"]) < 1e-4
+                        and abs(h1["c_oh_bottom"] - h0["c_oh_bottom"]) < 1e-4 * max(abs(h1["c_oh_bottom"]), 1.0)):
+                    return
+                yield 1e-3, 50
+            api.log(f"WARNING: not settled after {MAX_EXTRA_BLOCKS} extra 50 ms blocks")
+
+        for dt, n in stages():
             n = 2 if a.setup_only else n
             api.setv(rc.time_step_size, dt)
             api.iterate(solver, n, p["iters"])
