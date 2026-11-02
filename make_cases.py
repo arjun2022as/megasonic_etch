@@ -23,9 +23,9 @@ COLS = ["case", "walltime", "f_MHz", "I_W_cm2", "theta_deg", "recess_nm", "order
 
 
 def row(case, note, f=0, I=0, theta=90, recess=0, order="", migration=1, refine=1, walltime="04:00:00",
-        bubble=("", "")):
+        bubble=("", ""), iters=20):
     return dict(case=case, walltime=walltime, f_MHz=f, I_W_cm2=I, theta_deg=theta, recess_nm=recess, order=order,
-                migration=migration, er_ref_nm_min="", refine=refine, osc_scale=1, iters=20, bubble_top_um=bubble[0],
+                migration=migration, er_ref_nm_min="", refine=refine, osc_scale=1, iters=iters, bubble_top_um=bubble[0],
                 bubble_len_um=bubble[1], note=note)
 
 
@@ -47,6 +47,9 @@ def rows():
     out += angle_bubble_rows()
     out += growth_snapshot_rows()
     out += comb_rows()
+    out.append(row("V_B0_floor_r300_it80", "check: B0_floor_r300 with 80 iterations per time step (sealed pockets "
+                   "deplete ~3x slower than their etch rate allows with 20)", recess=300, walltime="24:00:00",
+                   bubble=(9, 1), iters=80))
     return out
 
 
