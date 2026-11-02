@@ -91,3 +91,19 @@ Everything in tables 1, 2 and 4, plus:
 | Not included | displaced-liquid flow (Pe ~0.15), pumping, rectified diffusion, meniscus pinning | |
 | Checks | no bubble = 1D slit (4e-7); bubble wider than the domain = 1D plug intake (exact) | tests/test_sideview.py |
 | Results (13.9x) | sites 5 / 10 / 20 / 40 um: floor covered 91 / 81 / 55 / 26 %, bottom 24 / 53 / 128 / 211 nm/min (no bubbles 282) | spacing of bubble sites is the new key unknown |
+
+## 6. Case 5 (user numbering): sub-plug H2 bubbles (etchsim/nanobubble.py)
+
+Case numbering used with the user: 1 = M0 (table 1), 2 = fixed plugs (table 2), 3 = angles (table 3), 4 = growing
+plug and side view (tables 4, 5), 5 = this table, 6 = bubble-free window (next).
+
+| What | Formula / principle | Notes |
+|---|---|---|
+| Free round bubble | S_eq(r) = (p_atm + 2 gamma/r - p_vap)/p_atm (Laplace + Henry) | unstable: grows to a plug or dissolves |
+| Pinned surface nanobubble | footprint radius L fixed by roughness/edges; cap curvature R_c = 2 gamma/((S - 1) p_atm + p_vap); height h = R_c - sqrt(R_c^2 - L^2) | Lohse & Zhang, PRE 91, 031003 (2015) |
+| Stays small while | R_c >= L, i.e. S <= S_max(L) = 1 + (2 gamma/L - p_vap)/p_atm | above: cap passes a hemisphere, depins, grows to a plug |
+| 50 nm condition | S_max(50 nm) = 26.9x | the user's "cannot reach 50 nm radius" |
+| Largest stable footprint | L_max(S) = R_c(S) | 21 nm at 63x (mouth), 11 nm at 122x (floor) |
+| H2 profile | 1D slit without plugs, mouth from cases.csv | no sound = 90 deg (flat MegPie) |
+| Results | footprint 10 nm: stays small everywhere; 15 nm: runs away below 2.4 um (no sound) / 5.2 um (15 deg); >= 30 nm: runs away almost everywhere; all < 50 nm radius needs 74-78 % less H2 at the floor | gamma, c_sat ASSUMED; outflux and hysteresis not included (conservative) |
+| Checks | sphere of W/2 feels exactly twice the plug's Laplace pressure; cap pressure from its own geometry = liquid S; no balance above S_max | tests/test_nanobubble.py |
