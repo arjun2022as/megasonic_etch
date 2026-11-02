@@ -20,8 +20,17 @@ wall reaction), plus:
     unaffected by the slit's own breathing).
   * sound (optional): the pulsating plug pumps the liquid column above it (etchsim/cavitation.py), recomputed
     every step for the current plug top and length (a longer plug is softer and pumps more).
-Not included (yet): rectified diffusion (sound pumping extra gas into the pulsating plug), the plug's Laplace
-pressure changing as it nears the mouth, plugs nucleating away from the floor, wetting films past the plug.
+  * realistic tool (optional): sound only while the slit is under the MegPie sector (duty = (T_rev, T_on)).
+  * rectified diffusion (optional, rect=True): for a plug it reduces to one term. The gas meets the liquid only at
+    its end meniscus, whose area does not change as the plug pulses (no "area effect"), and the liquid column
+    moves rigidly with the meniscus, so the meniscus does not slide through the liquid (no "shell effect"; the
+    flow-profile mixing is the pumping dispersion above). Left: the gas pressure p = p0 / (1 + eps cos wt)
+    (isothermal, eps = dV/V) averages to p0 / sqrt(1 - eps^2), so the mean H2 at the meniscus is raised by that
+    factor: slightly LESS intake (eps ~ 0.4-1.5 %: ~1e-4 relative).
+  * early venting (optional, xi_vent=True): with sound on, the meniscus swings by xi (cavitation.pumping); once
+    the swing reaches the mouth (b <= xi) the plug vents.
+Not included (yet): the plug's Laplace pressure changing as it nears the mouth, plugs nucleating away from the
+floor, wetting films past the plug.
 Imposed oscillating flow and modelled mixing, not a full acoustic-streaming solution.
 """
 import math
@@ -49,15 +58,32 @@ def pump_fn(f, I, theta=90.0):
     return pump
 
 
+def pulsation(f, I, theta=90.0):
+    """Pumping dispersion, meniscus swing xi and volume amplitude eps of a plug (top at b, length l_b)."""
+    if not (f and I):
+        return None
+
+    def puls(b, l_b):
+        r = CV.pumping(f, I, b, l_b, theta=theta)
+        return dict(D={k: CV.oscillatory_dispersion(r["U"], f, Dm=P.D[k]) for k in ("OH", "SIL", "H2", "TMA")},
+                    xi=r["xi"], eps=r["dV_over_V"])
+    return puls
+
+
+def sound_on(t, duty):
+    """duty = (T_rev, T_on): sound only during the first T_on of every revolution; None = always on."""
+    return duty is None or (t % duty[0]) < duty[1]
+
+
 class PlugSlit(Slit):
     """Liquid column between the mouth (z = 0) and the plug top or the floor (z = b), one implicit time step."""
 
-    def __init__(self, b, surf, c_old, dt, plug, pump=None, dz=10e-9):
+    def __init__(self, b, surf, c_old, dt, plug, pump=None, dz=10e-9, c_bub=C_BUB):
         n = max(4, int(round(b / dz)))
         super().__init__(n=n, L=b, km=None)
         self.poly = layer_mask(self.zc)              # walls do not move: same layers at the same depth
         self.bulk = dict(surf)
-        self.plug, self.dt = plug, dt
+        self.plug, self.dt, self.c_bub = plug, dt, c_bub
         self.pump = pump or {k: 0.0 for k in ("OH", "SIL", "H2", "TMA")}
         self.c_old = {s: np.interp(self.zc, *c_old[s]) for s in SPECIES}    # c_old[s] = (z, c)
 
@@ -81,7 +107,7 @@ class PlugSlit(Slit):
             N[s] = -(self.D[s] + self.pump[s]) * grad[s] + P.Z[s] * self.D[s] * mid[s] * ratio
             N[s][-1] = 0.0
         if self.plug:                                # H2 into the plug across the half cell next to it
-            N["H2"][-1] = -(self.D["H2"] + self.pump["H2"]) * (C_BUB - c["H2"][-1]) / (0.5 * self.dz)
+            N["H2"][-1] = -(self.D["H2"] + self.pump["H2"]) * (self.c_bub - c["H2"][-1]) / (0.5 * self.dz)
         return N, ratio
 
     def residual(self, x, surf):
@@ -99,10 +125,11 @@ def layer_rates(z, er, L=P.L_SLIT):
 
 
 def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P.LAYER, dz=10e-9, dt_max=1e-3,
-             max_move=2.0, L=P.L_SLIT, log=None):
+             max_move=2.0, L=P.L_SLIT, log=None, sound=None, duty=None, rect=False, xi_vent=False):
     """Run the nucleate-grow-vent cycle from a freshly refilled slit (liquid = mouth composition) at t = 0.
 
     s_nuc = inf: no bubbles (control). max_move: largest plug-top step per time step, in cells.
+    sound = pulsation(f, I, theta) replaces `pump` and enables duty (intermittent sound), rect and xi_vent.
     Returns the plug history, events and the time-averaged etch rate of every poly-Si layer.
     """
     zref = (np.arange(int(round(L / dz))) + 0.5) * dz             # fixed reference grid for averages
@@ -111,10 +138,15 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
     hist, events, vents = [], [], []
     er_int = np.zeros_like(zref)
     x = None
+    if duty:
+        dt_max = min(dt_max, duty[1] / 10)                         # resolve the on/off switching
     while t < t_end - 1e-15:
         dt = min(dt, t_end - t)
-        pd = pump(b, L - b) if (pump and plug) else None
-        s = PlugSlit(b, surf, state, dt, plug, pd, dz)
+        on = sound is not None and plug and sound_on(t, duty)
+        sv = sound(b, L - b) if on else None
+        pd = sv["D"] if on else (pump(b, L - b) if (pump and plug) else None)
+        cb = C_BUB / np.sqrt(1 - sv["eps"] ** 2) if (on and rect) else C_BUB
+        s = PlugSlit(b, surf, state, dt, plug, pd, dz, cb)
         res = s.solve(guess=(x, surf) if x is not None and len(x) == 3 * s.n else
                       (np.concatenate([s.c_old[k] for k in SPECIES]), surf))
         c = res["c"]
@@ -125,7 +157,7 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
         t += dt
         h2max = c["H2"].max()
         hist.append(dict(t=t, b=b, plug=plug, l_b=L - b if plug else 0.0, H2_in=N_in * P.W_SLIT, growth=growth,
-                         s_max=h2max / P.H2_SAT))
+                         s_max=h2max / P.H2_SAT, sound=bool(on)))
         # ---- events and the next state
         pz = np.concatenate(([0.0], s.zc, [b]))                    # profile points incl. mouth and bottom
         pc = {k: np.concatenate(([surf[k]], c[k], c[k][-1:])) for k in SPECIES}
@@ -136,7 +168,7 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
         elif plug:
             shift = growth * dt                                     # > 0: plug top rises, liquid pushed out
             b_new = b - shift
-            if b_new <= b_vent:                                     # reaches the mouth: vent, refill
+            if b_new <= max(b_vent, sv["xi"] if (on and xi_vent) else 0.0):   # reaches the mouth: vent
                 events.append(("vent", t))
                 vents.append((t, er_int.copy()))
                 plug, b, state, dt, x = False, L, fresh, 1e-6, None

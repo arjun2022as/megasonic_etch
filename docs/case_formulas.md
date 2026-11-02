@@ -73,7 +73,12 @@ Everything in tables 1 and 2 (plug pressure, Henry uptake, pumping), plus:
 | Sound | plug pumping D_pump(b, l_b) from cavitation.py every step; tilt via the A-case mouth values | rectified diffusion NOT yet included |
 | Checks | fixed 1 um plug: intake = Fluent within 0.3-1.5 %; no reaction: N = D (c_mouth - c*)/b; H2 made = into plug + out of mouth | tests/test_plug.py |
 | Results (0.3 s) | s_nuc 13.9/27: cycle 49 ms (none) .. 68 ms (15 deg), bottom 3-4 nm/min (0.01 of top); s_nuc 100: bottom 29 .. 55 nm/min; no bubbles: 281.5, max H2 122x (none) .. 102x (15 deg) | nucleation threshold is the key unknown |
-| Fluent snapshots | B0_ / B_f1_I2_ / BA_f1_I2_t15_ floor_l3000, _l6000 (fixed 3 and 6 um plugs) | pending |
+| Fluent snapshots (flat) | B0_ / B_f1_I2_ / BA_f1_I2_t15_ floor_l3000, _l6000: growth none 145 / 175, 90 deg 146 / 176, 15 deg 111 / 129 um/s | 1D fixed-mouth within 3 % except 6 um no sound (+12 %: 2D drains the liquid above the mouth) |
+| Realistic tool | flat MegPie 90 deg, 1 MHz, 1-2 W/cm2, sound on 33 of every 200 ms (300 rpm, 60 deg sector, ASSUMED) | run_realistic.py |
+| Rectified diffusion (plug) | mean of p0/(1 + eps cos wt) = p0/sqrt(1 - eps^2), eps = dV/V; no area or shell effect for a plug | raises c* ~1e-4: slightly less intake |
+| Early venting | vent when the meniscus swing xi (cavitation.pumping) reaches the mouth | xi ~10 nm deep, 90-450 nm near the mouth |
+| Realistic result | all sound settings within 1 % of no sound (cycle 48-49 ms, bottom 3.0 nm/min at 13.9x; 29 nm/min at 100x) | the tool does not change the bubble cycle |
+| Comb snapshots | _l3000_r300, _l6000_r300 | on hold (comb convergence test) |
 
 ## 5. Side view: finite bubbles along the trench (etchsim/sideview.py)
 
