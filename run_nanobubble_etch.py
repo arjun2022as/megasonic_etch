@@ -48,17 +48,18 @@ def solve(case, L, phi, iters=20):
     run = ~covered
     return dict(top=top * 6e10, bottom=bot * 6e10, U=bot / top, S_floor=r["S_h2"].max(), S_max=smax,
                 runaway_from_um=float(r["z"][run][0] * 1e6) if run.any() else None,
-                runaway_fraction=float(run.mean()))
+                runaway_fraction=float(run.mean())), (r["z"][poly], er_p * 6e10, r["z"], r["S_h2"], covered)
 
 
 def main():
-    rows = []
+    rows, profiles = [], {}
     print(f"{'sound':18s} {'L nm':>4} {'cover':>5} | {'top':>6} {'bottom':>6} nm/min {'bottom/top':>10} | "
           f"{'S floor':>7} (limit) | caps run away to plugs")
     for label, case in SOUND.items():
         for L in FOOTPRINTS_NM:
             for phi in COVERAGE:
-                r = solve(case, L * 1e-9, phi)
+                r, prof = solve(case, L * 1e-9, phi)
+                profiles[(label, L, phi)] = prof
                 rows.append(dict(sound=label, footprint_nm=L, coverage=phi, **r))
                 if r["runaway_from_um"] is None:
                     print(f"{label:18s} {L:4d} {100 * phi:4.0f}% | {r['top']:6.1f} {r['bottom']:6.1f}        "
@@ -74,6 +75,38 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(rows[0]), lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
+    plot(profiles)
+
+
+def plot(profiles):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 3, figsize=(17, 5))
+    for (label, L, phi), (zp, er, z, S, cov) in profiles.items():
+        if L == 10:                                       # stays small everywhere: etch profiles
+            ax[0].plot(er, zp * 1e6, label=f"{label}, cover {100 * phi:.0f} %",
+                       ls="-" if label.startswith("no") else "--")
+            ax[1].plot(er / er[0], zp * 1e6, label=f"{label}, cover {100 * phi:.0f} %",
+                       ls="-" if label.startswith("no") else "--")
+        if label.startswith("no") and phi == 0.0:       # where caps of each size run away
+            ax[2].plot(np.where(cov, np.nan, 1.0) * L, z * 1e6, lw=6, solid_capstyle="butt",
+                       label=f"{L} nm: becomes a plug here")
+    for a in ax[:2]:
+        a.invert_yaxis()
+        a.set_ylabel("depth (um)")
+        a.legend(fontsize=7)
+    ax[0].set(xlabel="etch rate averaged over the wall (nm/min)", title="10 nm caps: slower etch, same shape")
+    ax[1].set(xlabel="etch rate / rate at the top", title="10 nm caps: uniformity slightly better with cover")
+    ax[2].invert_yaxis()
+    ax[2].set(xlabel="cap footprint radius (nm)", ylabel="depth (um)", xlim=(5, 25),
+              title="No sound: where caps cannot stay small (-> plugs, case 4)")
+    ax[2].legend(fontsize=7)
+    fig.suptitle("Case 5: small pinned H2 bubbles on the poly-Si wall, 100 nm x 10 um slit, 5 wt% TMAH 60 C "
+                 "(coverage, gamma, c_sat ASSUMED). Imposed oscillating flow + modelled mixing, not acoustic "
+                 "streaming", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(OUT / "nanobubble_etch.png", dpi=130)
 
 
 if __name__ == "__main__":

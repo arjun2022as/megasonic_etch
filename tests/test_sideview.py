@@ -55,13 +55,14 @@ def test_half_disc_area():
 
 
 def test_comb_mesh_with_plug():
-    """Recessed walls + floor plug: all pocket fronts stay (liquid pockets), pocket mouths beside the plug are
-    bubble faces, built-in checks (orientation, 4 faces per cell, lengths, area) pass."""
+    """Recessed walls + floor plug: the sealed pockets beside the plug are left out (handled by
+    plug.sealed_pocket), built-in checks (orientation, 4 faces per cell, lengths, area) pass."""
     W, L, layer, R = 100e-9, 10e-6, 50e-9, 300e-9
     nodes, cells, xs, ys, zones, ext = mesh2d.build(W, L, layer, R, 1e-6, 2e-6, 5e-9, 10e-9, 5e-9, 1.1, 9e-6, 1e-6)
     mesh2d.check(nodes, cells, xs, ys, zones, W, L, layer, R, 2e-6, ext["X0"], ext["X1"], 9e-6, 1e-6)
     sealed = mesh2d.sealed_poly_layers(L, layer, 9e-6, 1e-6)
     assert len(sealed) == 10
-    assert len(zones[mesh2d.POLY_ID]) == 2 * 100 * 5           # 100 poly layers, 2 sides, 5 rows each
+    assert len(zones[mesh2d.POLY_ID]) == 2 * 90 * 5            # 90 open poly layers, 2 sides, 5 rows each
     assert len(zones[mesh2d.BUBBLE_ID]) == 20                   # plug top (20 cells across W)
-    assert len(zones[mesh2d.BUBBLE_POCKET_ID]) == 2 * 10 * 5     # pocket mouths: own zone (Fluent splits mixed zones)
+    assert len(zones[mesh2d.BUBBLE_POCKET_ID]) == 0             # no sealed pockets in the mesh
+    assert sum(1 for c in cells if c[2] == 4) == 2 * 90 * 5 * 60   # pocket cells: open layers only, 60 across R

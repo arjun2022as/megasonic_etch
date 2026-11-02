@@ -16,9 +16,10 @@ Layers below y = 0 alternate SiO2 / poly-Si (50 nm each, oxide first). Wall zone
   wafer-top  top surface of the stack either side of the slit
   bubble     optional H2 gas plug filling the slit width from depth bubble_top to bubble_top + bubble_len
              (cells removed; its menisci pass H2 only, see etch.c). Flat walls: the poly-Si beside it is dry.
-             Recessed walls (comb): the 50 nm pockets beside the plug stay FULL OF LIQUID (a wetting liquid holds
-             the narrower gap: gas would need 2 gamma / 50 nm > 2 gamma / W to enter, ASSUMED contact angle ~0),
-             sealed from the mouth; the pocket mouths are bubble faces too.
+             Recessed walls (comb): the 50 nm pockets beside the plug stay full of liquid in reality, sealed from
+             the mouth. They are LEFT OUT of the mesh: Fluent 24.1 mishandled these closed liquid islands (2026-11-02:
+             exact stoichiometry but OH- used 3x-70x slower than their own etch rate), and they are not steady anyway.
+             They are handled exactly by etchsim.plug.sealed_pocket (stored-etchant formula) in the 1D cycle model.
 Cell zones: bulk (y > 0), slit, pocket. Fluent 2D face convention: c0 on the LEFT of n0 -> n1.
 """
 import argparse
@@ -41,10 +42,10 @@ def in_bubble(y0, y1, bubble_top, bubble_len, tol=1e-12):
 
 
 def wet_poly_layers(L, layer, bubble_top=0.0, bubble_len=0.0, recess=0.0):
-    """Number of poly-Si layers (odd k, k = 0 at the top) still in liquid: not covered by the gas plug, or (recessed
-    walls) all of them, since the pockets beside a plug stay liquid-filled."""
+    """Number of poly-Si layers (odd k, k = 0 at the top) in the mesh liquid: not beside the gas plug (the sealed
+    pockets beside it are left out of the mesh even with recessed walls; recess kept for the call signature)."""
     return sum(1 for k in range(round(L / layer)) if k % 2 == 1
-               and (recess > 0 or not in_bubble(-(k + 1) * layer, -k * layer, bubble_top, bubble_len)))
+               and not in_bubble(-(k + 1) * layer, -k * layer, bubble_top, bubble_len))
 
 
 def sealed_poly_layers(L, layer, bubble_top=0.0, bubble_len=0.0):
@@ -111,7 +112,8 @@ def build(W, L, layer, R, pitch, H, dx, dy, dy_top0, ratio, bubble_top=0.0, bubb
             elif i_0 <= i < i_w:
                 if not in_bubble(ys[j], ys[j + 1], bubble_top, bubble_len):
                     cells.append((i, j, 3))
-            elif R > 0 and poly_layer(yc) and (i_r0 <= i < i_0 or i_w <= i < i_r1):
+            elif (R > 0 and poly_layer(yc) and (i_r0 <= i < i_0 or i_w <= i < i_r1)
+                  and not in_bubble(ys[j], ys[j + 1], bubble_top, bubble_len)):   # sealed pockets left out
                 cells.append((i, j, 4))
     cells.sort(key=lambda c: (c[2], c[1], c[0]))            # zone by zone (Fluent needs contiguous ids)
 
@@ -186,13 +188,14 @@ def check(nodes, cells, xs, ys, zones, W, L, layer, R, H, X0, X1, bubble_top=0.0
     want = {6: H, 7: H, 8: X1 - X0, 9: (X1 - X0) - W, POLY_ID: 2 * n_wet * layer}
     if bubble_len > 0:
         want[BUBBLE_ID] = W * (1 if bubble_top + bubble_len >= L * (1 - 1e-12) else 2)
-        if R > 0:                                                    # both pocket mouths per sealed layer
-            want[BUBBLE_POCKET_ID] = 2 * layer * len(sealed_poly_layers(L, layer, bubble_top, bubble_len))
+        if R > 0:                                                    # sealed pockets left out: no pocket mouths
+            want[BUBBLE_POCKET_ID] = 0.0
     for zid, v in want.items():
         if abs(length(zid) - v) > 1e-6 * v:
             raise RuntimeError(f"zone {zid} length {length(zid)} != {v}")
     area = sum((xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]) for i, j, _ in cells)
-    expect = (X1 - X0) * H + W * (L - bubble_len) + 2 * R * layer * n_poly
+    n_open = n_poly - (len(sealed_poly_layers(L, layer, bubble_top, bubble_len)) if bubble_len > 0 else 0)
+    expect = (X1 - X0) * H + W * (L - bubble_len) + 2 * R * layer * n_open
     if abs(area - expect) > 1e-6 * expect:
         raise RuntimeError(f"area {area} != {expect}")
 

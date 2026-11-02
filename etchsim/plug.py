@@ -29,6 +29,12 @@ wall reaction), plus:
     factor: slightly LESS intake (eps ~ 0.4-1.5 %: ~1e-4 relative).
   * early venting (optional, xi_vent=True): with sound on, the meniscus swings by xi (cavitation.pumping); once
     the swing reaches the mouth (b <= xi) the plug vents.
+  * comb walls (optional, recess = R > 0): the poly-Si sits at the end of 50 nm pockets of depth R. Beside the
+    plug the pockets stay full of liquid (gas cannot enter a gap narrower than the slit) and are cut off from the
+    mouth: each keeps etching on its stored etchant, dc/dt = -2 r(c) / R (front area / pocket volume = 1/R), which
+    for r = K (c/C)^n (n = 1/4) integrates exactly: c^(1-n) = c0^(1-n) - (1-n) 2 K / (R C^n) t
+    (sealed_pocket()). Its H2 (2 r / R) goes into the plug through the pocket mouth (liquid there held at 13.9x).
+    Open pockets exchange with the slit in ~R^2/D ~ 10 us, so they follow the local slit liquid (ASSUMED instant).
 Not included (yet): the plug's Laplace pressure changing as it nears the mouth, plugs nucleating away from the
 floor, wetting films past the plug.
 Imposed oscillating flow and modelled mixing, not a full acoustic-streaming solution.
@@ -68,6 +74,17 @@ def pulsation(f, I, theta=90.0):
         return dict(D={k: CV.oscillatory_dispersion(r["U"], f, Dm=P.D[k]) for k in ("OH", "SIL", "H2", "TMA")},
                     xi=r["xi"], eps=r["dV_over_V"])
     return puls
+
+
+def sealed_pocket(c0, R, dt, er_ref=P.ER_REF, order=P.ORDER_OH, cb=P.C_BULK):
+    """OH- left in a sealed pocket of depth R after time dt, starting from c0 (exact for the power-law rate)."""
+    k = (1 - order) * 2 * P.si_flux(er_ref) / (R * cb ** order)
+    return np.maximum(np.asarray(c0, float) ** (1 - order) - k * dt, 0.0) ** (1 / (1 - order))
+
+
+def pocket_rate(c, er_ref=P.ER_REF, order=P.ORDER_OH, cb=P.C_BULK):
+    """Front etch rate [mol Si/m2/s] in a pocket holding OH- at c (same law as the slit walls)."""
+    return P.si_flux(er_ref) * (np.maximum(c, 0.0) / cb) ** order
 
 
 def sound_on(t, duty):
@@ -125,11 +142,12 @@ def layer_rates(z, er, L=P.L_SLIT):
 
 
 def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P.LAYER, dz=10e-9, dt_max=1e-3,
-             max_move=2.0, L=P.L_SLIT, log=None, sound=None, duty=None, rect=False, xi_vent=False):
+             max_move=2.0, L=P.L_SLIT, log=None, sound=None, duty=None, rect=False, xi_vent=False, recess=0.0):
     """Run the nucleate-grow-vent cycle from a freshly refilled slit (liquid = mouth composition) at t = 0.
 
     s_nuc = inf: no bubbles (control). max_move: largest plug-top step per time step, in cells.
     sound = pulsation(f, I, theta) replaces `pump` and enables duty (intermittent sound), rect and xi_vent.
+    recess > 0: comb walls; pockets beside the plug keep etching on stored etchant (sealed_pocket).
     Returns the plug history, events and the time-averaged etch rate of every poly-Si layer.
     """
     zref = (np.arange(int(round(L / dz))) + 0.5) * dz             # fixed reference grid for averages
@@ -137,6 +155,8 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
     state, b, plug, t, dt = fresh, L, False, 0.0, 1e-6
     hist, events, vents = [], [], []
     er_int = np.zeros_like(zref)
+    poly_ref = layer_mask(zref)
+    cp = np.full_like(zref, surf["OH"])                            # OH- in each pocket (comb walls)
     x = None
     if duty:
         dt_max = min(dt_max, duty[1] / 10)                         # resolve the on/off switching
@@ -151,8 +171,15 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
                       (np.concatenate([s.c_old[k] for k in SPECIES]), surf))
         c = res["c"]
         N_in = res["N"]["H2"][-1] if plug else 0.0                # mol/m2/s into the plug
+        er_cells = np.interp(zref, s.zc, res["er"]) * (zref < b)    # dry under the plug (flat walls)
+        if recess > 0:
+            sealed = plug & (zref >= b)
+            c_mid = sealed_pocket(cp, recess, 0.5 * dt)             # rate at the step's midpoint
+            r_p = pocket_rate(c_mid) * poly_ref * sealed
+            N_in = N_in + (2 * r_p * 2 * dz).sum() / P.W_SLIT        # pocket H2 into the plug, per slit area
+            er_cells = er_cells + r_p / P.si_flux(1.0)
+            cp = np.where(sealed, sealed_pocket(cp, recess, dt), np.interp(zref, s.zc, c["OH"]))
         growth = N_in / RHO_GAS                                     # m/s, plug length
-        er_cells = np.interp(zref, s.zc, res["er"]) * (zref < b)    # dry under the plug
         er_int += er_cells * dt
         t += dt
         h2max = c["H2"].max()
