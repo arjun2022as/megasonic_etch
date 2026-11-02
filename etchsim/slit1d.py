@@ -129,20 +129,21 @@ class Slit:
                 h = 1e-7 * max(self.cb, 1.0)
                 for color in range(9):                           # banded: 3 species x 3-cell stencil
                     sp, off = divmod(color, 3)
-                    idx = np.arange(off, n, 3) + sp * n
+                    cells = np.arange(off, n, 3)
+                    idx = cells + sp * n
                     xp = x.copy()
                     xp[idx] += h
                     dF = (self.residual(xp, surf) - F0) / h
-                    for j in idx:
-                        cell = j - sp * n
-                        for s2 in range(3):
-                            for d in (-1, 0, 1):
-                                ii = s2 * n + cell + d
-                                if 0 <= cell + d < n and dF[ii] != 0.0:
-                                    rows.append(ii)
-                                    cols.append(j)
-                                    vals.append(dF[ii])
-                J = csc_matrix((vals, (rows, cols)), shape=(3 * n, 3 * n))
+                    for s2 in range(3):                          # same entries as a cell-by-cell loop
+                        for d in (-1, 0, 1):
+                            ok = (cells + d >= 0) & (cells + d < n)
+                            ii = s2 * n + cells[ok] + d
+                            nz = dF[ii] != 0.0
+                            rows.append(ii[nz])
+                            cols.append(idx[ok][nz])
+                            vals.append(dF[ii][nz])
+                J = csc_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
+                               shape=(3 * n, 3 * n))
                 dx = spsolve(J, -F0)
                 lam = 1.0                                        # damped Newton keeping c_OH >= 0
                 while lam > 1e-4:

@@ -11,6 +11,8 @@ All cases: 5 wt% TMAH, 60 C, slit 100 nm x 10 um, SiO2/poly-Si 50/50 nm, MegPie 
   B    H2 gas plug 1 um long in the slit (top at 9 um = on the floor, 5 um = mid-depth, 1 um = near the mouth),
        flat wafer (90 deg): B0_* without sound (blocking only), B_f1_I2_* with 1 MHz, 2 W/cm2 (blocking + stable-
        cavitation pumping, etchsim/cavitation.py)
+  BA   1 um floor plug + sound at 60 / 45 / 15 deg
+  _l3000, _l6000   grown floor plugs 3 / 6 um long (snapshots for the 1D growing-plug model)
 """
 import csv
 from pathlib import Path
@@ -42,6 +44,7 @@ def rows():
     out.append(row("V_mesh2", "check: cells refined 2x (no megasonic)", refine=2, walltime="10:00:00"))
     out += bubble_rows()
     out += angle_bubble_rows()
+    out += growth_snapshot_rows()
     return out
 
 
@@ -62,6 +65,21 @@ def angle_bubble_rows():
     mouth and the plug pulsation change the H2 flow into the plug (its growth rate) vs B0_floor / B_f1_I2_floor."""
     return [row(f"BA_f1_I2_t{th}_floor", f"H2 plug 1 um on the floor, 1 MHz 2 W/cm2 at {th} deg", 1, 2, th, bubble=(9, 1))
             for th in (60, 45, 15)]
+
+
+def growth_snapshot_rows():
+    """Snapshots of a GROWN floor plug (1D growing-plug model, etchsim/plug.py, gives the time course): 3 and
+    6 um long (top at 7 / 4 um), no sound, 90 deg and 15 deg. With the 1 um B0/B_f1/BA_t15 floor cases they
+    check the 1D intake vs plug size in 2D (fixed plug, no displacement flow)."""
+    out = []
+    for length in (3, 6):
+        top, tag = 10 - length, f"_l{length * 1000}"
+        out.append(row(f"B0_floor{tag}", f"H2 plug {length} um on the floor (top {top} um), no sound", bubble=(top, length)))
+        out.append(row(f"B_f1_I2_floor{tag}", f"H2 plug {length} um on the floor, 1 MHz 2 W/cm2 at 90 deg", 1, 2, 90,
+                       bubble=(top, length)))
+        out.append(row(f"BA_f1_I2_t15_floor{tag}", f"H2 plug {length} um on the floor, 1 MHz 2 W/cm2 at 15 deg", 1, 2,
+                       15, bubble=(top, length)))
+    return out
 
 
 if __name__ == "__main__":

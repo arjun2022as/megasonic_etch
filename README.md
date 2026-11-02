@@ -40,5 +40,6 @@ Uses the `~/venvs/pyfluent241` environment from `3d_nand`. The UDF is compiled b
 ```bash
 uv run --no-project --with numpy --with scipy --with matplotlib python run_1d.py
 uv run --no-project --with numpy --with scipy --with matplotlib python run_evolution.py
+uv run --no-project --with numpy --with scipy --with matplotlib python run_plug.py      # growing H2 plug cycle
 uv run --no-project --with pytest --with numpy --with scipy pytest -q
 ```

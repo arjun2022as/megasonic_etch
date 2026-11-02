@@ -56,3 +56,21 @@ Everything in table 1, plus:
 | Mouth supply | 1D wafer-level model with the extra megasonic mixing | higher mouth OH⁻ than M0 |
 | Results (rerun, 2026-11-01) | bottom/top t75 0.95718, t60 0.95713, t45 0.95725, t30 0.95740, t15 0.95738 (M0 0.95758); top rate 293.3–295.0 nm/min (M0 292.4) | faster overall, uniformity unchanged |
 | Status | H₂ zone-id bug fixed (H₂ now rises with depth); OMEGA rename changed nothing. Settled (history flat), but the cell balance (residual_2d.py) still shows OH⁻ −6…−11 % and H₂ +4…+8 % off in A_t45, silicate exact: **small steady error, cause open** | conclusion (no uniformity gain) not affected |
+
+## 4. Growing H2 plug: nucleate -> grow -> vent -> refill (1D, etchsim/plug.py)
+
+Everything in tables 1 and 2 (plug pressure, Henry uptake, pumping), plus:
+
+| What | Formula / principle | Notes |
+|---|---|---|
+| Time-dependent transport | dc_i/dt = -dN_i/dz + nu_i r 2 f_poly / W, implicit Euler, 10 nm cells | same Nernst-Planck / zero current as the 1D slit |
+| Plug growth | db/dt = -N_H2(b) / rho_g, rho_g = p_g/(RT) = 507 mol/m3 | N_H2 < 0 (dissolving) shrinks it |
+| Displaced liquid | the column above moves out of the mouth at \|db/dt\| (plug flow), semi-Lagrangian shift each step | not in the fixed-plug Fluent cases |
+| Nucleation | when max c_H2 > s_nuc c_sat: plug of 100 nm on the floor | s_nuc unknown: 13.9 / 27 / 70 / 100 / inf swept (ASSUMED floor) |
+| Seed size vs threshold | S = 1 + 2 gamma/(r p_atm): 27x for a 50 nm sphere; 13.9x = plug-sized pocket already there | |
+| Venting and refill | plug top within 100 nm of the mouth -> gas leaves; slit refills with mouth liquid (Washburn ~20 us, instant) | ASSUMED |
+| Mouth | concentrations fixed from cases.csv (M0 or matching A case) | slit breathing does not change the wafer film (ASSUMED) |
+| Sound | plug pumping D_pump(b, l_b) from cavitation.py every step; tilt via the A-case mouth values | rectified diffusion NOT yet included |
+| Checks | fixed 1 um plug: intake = Fluent within 0.3-1.5 %; no reaction: N = D (c_mouth - c*)/b; H2 made = into plug + out of mouth | tests/test_plug.py |
+| Results (0.3 s) | s_nuc 13.9/27: cycle 49 ms (none) .. 68 ms (15 deg), bottom 3-4 nm/min (0.01 of top); s_nuc 100: bottom 29 .. 55 nm/min; no bubbles: 281.5, max H2 122x (none) .. 102x (15 deg) | nucleation threshold is the key unknown |
+| Fluent snapshots | B0_ / B_f1_I2_ / BA_f1_I2_t15_ floor_l3000, _l6000 (fixed 3 and 6 um plugs) | pending |

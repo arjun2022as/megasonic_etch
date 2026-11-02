@@ -85,6 +85,6 @@ def test_udf_migration_matches_1d_model():
 
 
 def test_source_signs():
-    m = re.search(r"DEFINE_SOURCE\(src_oh.*?src\(c, t, (-?[\d.]+)", UDF)
+    m = re.search(r"DEFINE_SOURCE\(src_oh.*?src\(c, t, 0, (-?[\d.]+)", UDF, re.S)
     assert float(m.group(1)) == -2.0
-    assert "src(c, t, 1.0" in UDF and "src(c, t, 2.0" in UDF
+    assert "src(c, t, 1, 1.0" in UDF and "src(c, t, 2, 2.0" in UDF
