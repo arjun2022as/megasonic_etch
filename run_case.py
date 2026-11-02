@@ -42,18 +42,22 @@ def read_dumps(out):
     return poly, centre
 
 
-def metrics(poly, centre):
-    """Per poly-Si layer etch rate (both sides averaged), top/bottom, and the centre-column profile."""
-    layers = {}
+def metrics(poly, centre, sealed=()):
+    """Per poly-Si layer etch rate (both sides averaged), top/bottom, and the centre-column profile.
+    sealed: layer indices in liquid pockets beside an H2 plug (recessed walls), cut off from the mouth; left out
+    of top/bottom/mean and reported separately."""
+    layers, cut = {}, {}
     for r in poly:                                  # layers under an H2 plug are absent (dry, not etched)
         k = int(-r["y"] // P.LAYER)
-        layers.setdefault(k, []).append(r["etch_m_s"])
+        (cut if k in sealed else layers).setdefault(k, []).append(r["etch_m_s"])
     ks = sorted(layers)
     er = [sum(layers[k]) / len(layers[k]) for k in ks]
     n5 = max(1, len(er) // 20)
     top, bot = sum(er[:n5]) / n5, sum(er[-n5:]) / n5
     cen = sorted((r for r in centre if r["y"] < 0), key=lambda r: -r["y"])
-    return dict(n_poly_layers=len(ks), n_dry_layers=round(P.L_SLIT / P.LAYER) // 2 - len(ks),
+    er_cut = [sum(v) / len(v) for v in cut.values()]
+    return dict(n_poly_layers=len(ks), n_dry_layers=round(P.L_SLIT / P.LAYER) // 2 - len(ks) - len(cut),
+                n_sealed_layers=len(cut), er_sealed_nm_min=sum(er_cut) / len(er_cut) * 6e10 if er_cut else 0.0,
                 er_top_nm_min=top * 6e10, er_bottom_nm_min=bot * 6e10,
                 uniformity=bot / top if top > 0 else float("nan"),
                 er_mean_nm_min=sum(er) / len(er) * 6e10 if er else float("nan"),
@@ -91,6 +95,9 @@ def main():
         old.unlink()
     msh = out / f"{a.case}.msh"
     p["mesh_info"] = mesh2d.main(mesh_argv(p, msh))
+    mm = p["mesh"]
+    sealed = set(mesh2d.sealed_poly_layers(mm["L"], mm["layer"], mm["bubble_top"], mm["bubble_len"])
+                 if mm["recess"] > 0 and mm["bubble_len"] > 0 else ())
     (out / "etch_params.h").write_text(header(p))          # kept for reference only
     src = (HERE / "fluent2d" / "udf" / "etch.c").read_text()
     inc = '#include "etch_params.h"'
@@ -197,17 +204,19 @@ def main():
             api.iterate(solver, n, p["iters"])
             t_sim += dt * n
             api.on_demand(solver, "dump")
-            m = metrics(*read_dumps(out))
+            m = metrics(*read_dumps(out), sealed)
             hist.append(dict(t_B=t_sim, dt=dt, **{k: v for k, v in m.items() if k != "layers"}))
             api.log(f"phase B t = {t_sim:.4g} s: etch top {m['er_top_nm_min']:.2f} bottom {m['er_bottom_nm_min']:.2f} "
                     f"nm/min, bottom/top {m['uniformity']:.4f}, c_OH mouth {m['c_oh_mouth']:.1f} bottom "
                     f"{m['c_oh_bottom']:.1f}, c_SIL bottom {m['c_sil_bottom']:.1f}, c_H2 bottom {m['c_h2_bottom']:.1f}"
-                    + (f", dry layers {m['n_dry_layers']}" if m["n_dry_layers"] else ""))
+                    + (f", dry layers {m['n_dry_layers']}" if m["n_dry_layers"] else "")
+                    + (f", sealed pocket layers {m['n_sealed_layers']} at {m['er_sealed_nm_min']:.3g} nm/min"
+                       if m["n_sealed_layers"] else ""))
         api.on_demand(solver, "report")
         api.on_demand(solver, "dump")
         api.on_demand(solver, "dump_field")                 # whole field for make_contours.py
         api.first_ok("write case/data", lambda: s.file.write(file_type="case-data", file_name=f"{a.case}-final.cas.h5"))
-        m = metrics(*read_dumps(out))
+        m = metrics(*read_dumps(out), sealed)
         conv = abs(hist[-1]["uniformity"] - hist[-2]["uniformity"]) if len(hist) > 1 else float("nan")
         p.update(result=m, history=hist, quasi_steady_change=conv, setup_only=a.setup_only, wall_s=time.time() - t0)
         (out / "summary.json").write_text(json.dumps(p, indent=1, default=str))

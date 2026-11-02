@@ -15,7 +15,10 @@ Layers below y = 0 alternate SiO2 / poly-Si (50 nm each, oxide first). Wall zone
   oxide      slit wall in oxide layers, pocket roofs/floors, slit floor
   wafer-top  top surface of the stack either side of the slit
   bubble     optional H2 gas plug filling the slit width from depth bubble_top to bubble_top + bubble_len
-             (cells removed; its top and bottom menisci are no-flux walls; poly-Si inside it is dry)
+             (cells removed; its menisci pass H2 only, see etch.c). Flat walls: the poly-Si beside it is dry.
+             Recessed walls (comb): the 50 nm pockets beside the plug stay FULL OF LIQUID (a wetting liquid holds
+             the narrower gap: gas would need 2 gamma / 50 nm > 2 gamma / W to enter, ASSUMED contact angle ~0),
+             sealed from the mouth; the pocket mouths are bubble faces too.
 Cell zones: bulk (y > 0), slit, pocket. Fluent 2D face convention: c0 on the LEFT of n0 -> n1.
 """
 import argparse
@@ -36,10 +39,17 @@ def in_bubble(y0, y1, bubble_top, bubble_len, tol=1e-12):
     return bubble_len > 0 and y0 >= -(bubble_top + bubble_len) - tol and y1 <= -bubble_top + tol
 
 
-def wet_poly_layers(L, layer, bubble_top=0.0, bubble_len=0.0):
-    """Number of poly-Si layers (odd k, k = 0 at the top) not covered by the gas plug."""
+def wet_poly_layers(L, layer, bubble_top=0.0, bubble_len=0.0, recess=0.0):
+    """Number of poly-Si layers (odd k, k = 0 at the top) still in liquid: not covered by the gas plug, or (recessed
+    walls) all of them, since the pockets beside a plug stay liquid-filled."""
     return sum(1 for k in range(round(L / layer)) if k % 2 == 1
-               and not in_bubble(-(k + 1) * layer, -k * layer, bubble_top, bubble_len))
+               and (recess > 0 or not in_bubble(-(k + 1) * layer, -k * layer, bubble_top, bubble_len)))
+
+
+def sealed_poly_layers(L, layer, bubble_top=0.0, bubble_len=0.0):
+    """Layer indices k beside the plug (recessed walls: liquid pockets cut off from the mouth)."""
+    return [k for k in range(round(L / layer)) if k % 2 == 1
+            and in_bubble(-(k + 1) * layer, -k * layer, bubble_top, bubble_len)]
 
 
 def graded(L, h0, ratio, hmax):
@@ -68,8 +78,8 @@ def build(W, L, layer, R, pitch, H, dx, dy, dy_top0, ratio, bubble_top=0.0, bubb
         for v in (bubble_top, bubble_len):
             if abs(v / layer - round(v / layer)) > 1e-6:
                 raise SystemExit("bubble top and length must be whole layers (multiples of the layer thickness)")
-        if R > 0 or bubble_top < layer or bubble_top + bubble_len > L * (1 + 1e-12):
-            raise SystemExit("bubble needs recess 0 and must lie inside the slit, below the first layer")
+        if bubble_top < layer or bubble_top + bubble_len > L * (1 + 1e-12):
+            raise SystemExit("bubble must lie inside the slit, below the first layer")
     breaks = sorted({X0, -R, 0.0, W, W + R, X1})
     xs = []
     for a, b in zip(breaks, breaks[1:]):
@@ -138,8 +148,11 @@ def build(W, L, layer, R, pitch, H, dx, dy, dy_top0, ratio, bubble_top=0.0, bubb
             zones[8].append(f)
         elif abs(ym) < tol:
             zones[9].append(f)
-        elif bubble_len > 0 and abs(ya - yb) < tol and (abs(ym + bubble_top) < tol
-                                                        or abs(ym + bubble_top + bubble_len) < tol):
+        elif bubble_len > 0 and abs(ya - yb) < tol and 0 < xm < W and (abs(ym + bubble_top) < tol
+                                                                       or abs(ym + bubble_top + bubble_len) < tol):
+            zones[BUBBLE_ID].append(f)
+        elif (bubble_len > 0 and R > 0 and abs(xa - xb) < tol and (abs(xm) < tol or abs(xm - W) < tol)
+              and -(bubble_top + bubble_len) < ym < -bubble_top):   # pocket mouth facing the plug
             zones[BUBBLE_ID].append(f)
         elif abs(xa - xb) < tol and poly_layer(ym):          # vertical wall in a poly-Si layer
             zones[POLY_ID].append(f)
@@ -168,10 +181,12 @@ def check(nodes, cells, xs, ys, zones, W, L, layer, R, H, X0, X1, bubble_top=0.0
     def length(zid):
         return sum(math.dist(nodes[p - 1], nodes[q - 1]) for p, q, _, _ in zones[zid])
     n_poly = round(L / layer) // 2
-    n_wet = wet_poly_layers(L, layer, bubble_top, bubble_len)
+    n_wet = wet_poly_layers(L, layer, bubble_top, bubble_len, R)
     want = {6: H, 7: H, 8: X1 - X0, 9: (X1 - X0) - W, POLY_ID: 2 * n_wet * layer}
     if bubble_len > 0:
         want[BUBBLE_ID] = W * (1 if bubble_top + bubble_len >= L * (1 - 1e-12) else 2)
+        if R > 0:                                                    # + both pocket mouths per sealed layer
+            want[BUBBLE_ID] += 2 * layer * len(sealed_poly_layers(L, layer, bubble_top, bubble_len))
     for zid, v in want.items():
         if abs(length(zid) - v) > 1e-6 * v:
             raise RuntimeError(f"zone {zid} length {length(zid)} != {v}")

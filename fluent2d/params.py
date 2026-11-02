@@ -133,7 +133,7 @@ def mesh_argv(p, out):
 def header(p):
     """Constants for udf/etch.c (SI units)."""
     m = p["mesh"]
-    n_poly = mesh2d.wet_poly_layers(P.L_SLIT, P.LAYER, m["bubble_top"], m["bubble_len"])
+    n_poly = mesh2d.wet_poly_layers(P.L_SLIT, P.LAYER, m["bubble_top"], m["bubble_len"], m["recess"])
     vals = dict(RHO=P.RHO_L, CB=P.C_BULK, D_OH=P.D["OH"], D_SIL=P.D["SIL"], D_TMA=P.D["TMA"], D_H2=P.D["H2"],
                 D_BASE=max(P.D[k] for k in ("OH", "SIL", "H2")),
                 K_SI=P.si_flux(p["er_ref"]), ORDER=p["order"], EPS=1e-6, OMEGA_AC=p["omega"],

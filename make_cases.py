@@ -13,6 +13,7 @@ All cases: 5 wt% TMAH, 60 C, slit 100 nm x 10 um, SiO2/poly-Si 50/50 nm, MegPie 
        cavitation pumping, etchsim/cavitation.py)
   BA   1 um floor plug + sound at 60 / 45 / 15 deg
   _l3000, _l6000   grown floor plugs 3 / 6 um long (snapshots for the 1D growing-plug model)
+  _r300   comb wall: poly-Si recessed 300 nm (pockets); liquid-filled sealed pockets beside a plug
 """
 import csv
 from pathlib import Path
@@ -45,6 +46,7 @@ def rows():
     out += bubble_rows()
     out += angle_bubble_rows()
     out += growth_snapshot_rows()
+    out += comb_rows()
     return out
 
 
@@ -79,6 +81,25 @@ def growth_snapshot_rows():
                        bubble=(top, length)))
         out.append(row(f"BA_f1_I2_t15_floor{tag}", f"H2 plug {length} um on the floor, 1 MHz 2 W/cm2 at 15 deg", 1, 2,
                        15, bubble=(top, length)))
+    return out
+
+
+def comb_rows(recess=300):
+    """Comb wall (poly-Si recessed `recess` nm into 50 nm pockets) for case sets 3 and 4: angles without a plug
+    (t45 and no-sound already exist as R_f1_I2_t45_r300 / R_none_r300), floor plug with no sound / 90 deg / angles,
+    and the grown 3 and 6 um plugs. Pockets beside a plug stay liquid-filled and sealed (fluent2d/mesh2d.py)."""
+    tag, wt = f"_r{recess}", "08:00:00"
+    out = [row(f"A_f1_I2_t{th}{tag}", f"comb {recess} nm, 1 MHz 2 W/cm2 at {th} deg", 1, 2, th, recess=recess,
+               walltime=wt) for th in (75, 60, 30, 15)]
+    plugs = [("", 9, 1)] + [(f"_l{n * 1000}", 10 - n, n) for n in (3, 6)]
+    for ltag, top, length in plugs:
+        out.append(row(f"B0_floor{ltag}{tag}", f"comb {recess} nm, {length} um floor plug, no sound", recess=recess,
+                       walltime=wt, bubble=(top, length)))
+        out.append(row(f"B_f1_I2_floor{ltag}{tag}", f"comb {recess} nm, {length} um floor plug, 1 MHz 2 W/cm2 90 deg",
+                       1, 2, 90, recess=recess, walltime=wt, bubble=(top, length)))
+        for th in ((60, 45, 15) if not ltag else (15,)):
+            out.append(row(f"BA_f1_I2_t{th}_floor{ltag}{tag}", f"comb {recess} nm, {length} um floor plug, 1 MHz "
+                           f"2 W/cm2 at {th} deg", 1, 2, th, recess=recess, walltime=wt, bubble=(top, length)))
     return out
 
 

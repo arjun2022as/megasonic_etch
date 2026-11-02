@@ -74,3 +74,20 @@ Everything in tables 1 and 2 (plug pressure, Henry uptake, pumping), plus:
 | Checks | fixed 1 um plug: intake = Fluent within 0.3-1.5 %; no reaction: N = D (c_mouth - c*)/b; H2 made = into plug + out of mouth | tests/test_plug.py |
 | Results (0.3 s) | s_nuc 13.9/27: cycle 49 ms (none) .. 68 ms (15 deg), bottom 3-4 nm/min (0.01 of top); s_nuc 100: bottom 29 .. 55 nm/min; no bubbles: 281.5, max H2 122x (none) .. 102x (15 deg) | nucleation threshold is the key unknown |
 | Fluent snapshots | B0_ / B_f1_I2_ / BA_f1_I2_t15_ floor_l3000, _l6000 (fixed 3 and 6 um plugs) | pending |
+
+## 5. Side view: finite bubbles along the trench (etchsim/sideview.py)
+
+Everything in tables 1, 2 and 4, plus:
+
+| What | Formula / principle | Notes |
+|---|---|---|
+| Domain | depth z (0..10 um) x trench length y (0..s/2), width-averaged; 100 nm x 200 nm cells | symmetry: half the spacing s between bubble sites |
+| Transport | dc/dt = -div N + nu r 2 f_poly/W, Nernst-Planck + zero current on z and y faces, implicit Euler | poly smeared f = 1/2 (bottom/top -0.003 vs layered) |
+| Bubble shape | half disc of radius R_b on the floor, fills the width; cells inside are gas, dry | pancake squeezed between the walls (ASSUMED isotropic growth) |
+| Bubble surface | OH-, silicate no flux; H2 at c* = 9.7 mM (13.9x) | as in Fluent |
+| Growth | dA/dt = (sum of H2 into the bubble per unit width) / rho_g; R_b from A (clipped by the domain) | R_b > s/2: neighbours merge into a sheet |
+| Nucleation, venting | one site per s on the floor when max H2 > s_nuc c_sat; vent when the top is within 200 nm of the mouth; refill with mouth liquid | ASSUMED |
+| Comb | front concentrations from pocket.front (recess R) | changes nothing measurable |
+| Not included | displaced-liquid flow (Pe ~0.15), pumping, rectified diffusion, meniscus pinning | |
+| Checks | no bubble = 1D slit (4e-7); bubble wider than the domain = 1D plug intake (exact) | tests/test_sideview.py |
+| Results (13.9x) | sites 5 / 10 / 20 / 40 um: floor covered 91 / 81 / 55 / 26 %, bottom 24 / 53 / 128 / 211 nm/min (no bubbles 282) | spacing of bubble sites is the new key unknown |
