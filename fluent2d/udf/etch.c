@@ -476,7 +476,6 @@ DEFINE_ON_DEMAND(report)
              cmin, cmax, smax, h2max, rmin * 6e10, rmax * 6e10);
     h2_in = PRF_GRSUM1(h2_in);
     if (BUB_TOP > 0.0)                                        /* plug lengthens at h2_in / (gas density x W) */
-        Message0("PLUG H2_in %g mol/s/m growth %g um/s
-", h2_in, h2_in / (RHO_GAS_PLUG * W_SLIT) * 1e6);
+        Message0("PLUG H2_in %g mol/s/m growth %g um/s\n", h2_in, h2_in / (RHO_GAS_PLUG * W_SLIT) * 1e6);
 #endif
 }
