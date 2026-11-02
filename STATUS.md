@@ -19,6 +19,7 @@ c_surf, same 1D 0.9575). A normal-incidence mechanism must be added first (candi
 of the slit, xi = L|1+R|p0/(rho c^2), already in etchsim/acoustics.py), then flat-wafer cases added.
 Every figure/summary: imposed oscillating flow + modelled mixing, NOT a full acoustic-streaming solution.
 
+- 2026-11-02 GATE (user): cases 3, 4, 5 must be COMPLETE before case 6; announce each completion. Open: case 3 comb (convergence test V_B0_floor_r300_it80, likely rerun) + B_f1/BA labels; case 4 comb snapshots + realistic MegPie (1 W/cm2, intermittent) + rectified diffusion; case 5 optional coverage effect.
 - 2026-11-02 CASE NUMBERING (user): 1 M0 baseline, 2 fixed plugs (B), 3 angles (A/BA, now on comb walls), 4 growing plug + side view + 3/6 um snapshots, 5 SUB-PLUG BUBBLES (new), 6 bubble-free window (was "case 5"/next).
 - 2026-11-02 CASE 5 sub-plug bubbles (etchsim/nanobubble.py, run_nanobubble.py, tests/test_nanobubble.py): free round bubbles cannot stay small (unstable Laplace-Henry balance); pinned surface nanobubbles (Lohse & Zhang 2015) can, while S <= S_max(L) = 1 + (2 gamma/L - p_vap)/p_atm (hemisphere limit): L 10/15/20/30/50 nm -> 131/88/66/44/27x. 1D slit H2 (no plug): no sound/90 deg mouth 63x floor 122x -> largest footprint that stays small 21 nm at the mouth, 11 nm at the floor (15 deg: 31 / 13 nm). Footprints >= 30 nm run away almost everywhere; keeping every bubble below 50 nm radius needs S < 27x everywhere = 74-78 % less H2 at the floor (case 6 levers). results_1d/nanobubble.csv/.png.
 
