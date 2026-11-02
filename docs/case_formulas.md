@@ -78,7 +78,11 @@ Everything in tables 1 and 2 (plug pressure, Henry uptake, pumping), plus:
 | Rectified diffusion (plug) | mean of p0/(1 + eps cos wt) = p0/sqrt(1 - eps^2), eps = dV/V; no area or shell effect for a plug | raises c* ~1e-4: slightly less intake |
 | Early venting | vent when the meniscus swing xi (cavitation.pumping) reaches the mouth | xi ~10 nm deep, 90-450 nm near the mouth |
 | Realistic result | all sound settings within 1 % of no sound (cycle 48-49 ms, bottom 3.0 nm/min at 13.9x; 29 nm/min at 100x) | the tool does not change the bubble cycle |
-| Comb snapshots | _l3000_r300, _l6000_r300 | on hold (comb convergence test) |
+| Comb walls, sealed pockets | beside a plug each pocket etches on stored etchant: dc/dt = -2 r(c)/R; with r = K (c/C)^(1/4): c^(3/4) = c0^(3/4) - (3/4) 2K t/(R C^(1/4)) | 300 nm pocket empties in 247 ms (> 48 ms cycle); RK4 check |
+| Pocket H2 | 2 r/R per pocket volume, all into the plug through the pocket mouth | cycle 49 -> 37 ms |
+| Comb result | bottom 3 / 22 / 44 / 90 / 232 / 269 / 286 / 290 nm/min at R = 0 / 5 / 10 / 20 / 50 / 100 / 300 / 600 nm | refill tops pockets up with 503 mM liquid (ASSUMED instant) |
+| Start-up delay | dR_bottom/dt = ER(R): from R0 = 0, 2, 5, 10, 20 nm -> 315 / 408 / 459 / 499 / 534 nm in 2 min (top 588, bubble-free 562) | uniform R along the slit ASSUMED |
+| Fluent comb + plug | sealed pockets left out of the mesh (Fluent 24.1 mishandles closed liquid islands) | 17 comb cases to rerun |
 
 ## 5. Side view: finite bubbles along the trench (etchsim/sideview.py)
 
