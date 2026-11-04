@@ -56,6 +56,11 @@ Everything in table 1, plus:
 | Mouth supply | 1D wafer-level model with the extra megasonic mixing | higher mouth OH⁻ than M0 |
 | Results (rerun, 2026-11-01) | bottom/top t75 0.95718, t60 0.95713, t45 0.95725, t30 0.95740, t15 0.95738 (M0 0.95758); top rate 293.3–295.0 nm/min (M0 292.4) | faster overall, uniformity unchanged |
 | Status | H₂ zone-id bug fixed (H₂ now rises with depth); OMEGA rename changed nothing. Settled (history flat), but the cell balance (residual_2d.py) still shows OH⁻ −6…−11 % and H₂ +4…+8 % off in A_t45, silicate exact: **small steady error, cause open** | conclusion (no uniformity gain) not affected |
+| Comb walls (case 3, 2026-11-03) | poly-Si recessed R = 300 nm into 50 nm pockets (ASSUMED uniform R); settle test incl. silicate passed, no warnings | R_none_r300 + R/A_f1_I2_t75…t15_r300 |
+| Comb result, no bubble | bottom/top none 0.96021, t75 0.95989, t60 0.95986, t45 0.95968, t30 0.95967, t15 0.95961 | angles give no uniformity gain on comb walls either (≤ −0.0006) |
+| Comb result, floor plug 1 µm | growth = H₂_in/(ρ_g W): none 147.7, 90° 147.9, 60° 137.0, 45° 128.5, 15° 118.3 µm/s | 3 % above flat walls (143/133/125/115); same −20 % from 90° to 15° |
+| Comb flux check (check_2d.py) | slit-centre flux vs consumption below: 4–6 % low mid-slit, 20 % in the last row; same for OH⁻, silicate and H₂, alternating with layer parity | geometric: in a comb part of the downward flux runs through the pockets, which a centre-line check does not see; not the migration term |
+| **Case 3 status** | **COMPLETE (2026-11-03)** | conclusion: incidence angle does not change in-slit uniformity, flat or comb |
 
 ## 4. Growing H2 plug: nucleate -> grow -> vent -> refill (1D, etchsim/plug.py)
 
@@ -82,7 +87,9 @@ Everything in tables 1 and 2 (plug pressure, Henry uptake, pumping), plus:
 | Pocket H2 | 2 r/R per pocket volume, all into the plug through the pocket mouth | cycle 49 -> 37 ms |
 | Comb result | bottom 3 / 22 / 44 / 90 / 232 / 269 / 286 / 290 nm/min at R = 0 / 5 / 10 / 20 / 50 / 100 / 300 / 600 nm | refill tops pockets up with 503 mM liquid (ASSUMED instant) |
 | Start-up delay | dR_bottom/dt = ER(R): from R0 = 0, 2, 5, 10, 20 nm -> 315 / 408 / 459 / 499 / 534 nm in 2 min (top 588, bubble-free 562) | uniform R along the slit ASSUMED |
-| Fluent comb + plug | sealed pockets left out of the mesh (Fluent 24.1 mishandles closed liquid islands) | 17 comb cases to rerun |
+| Fluent comb + plug | sealed pockets left out of the mesh (Fluent 24.1 mishandles closed liquid islands) | rerun 2026-11-03, settled |
+| Comb snapshots vs 1D | growth µm/s, Fluent / 1D: 1 µm plug none 147.7/143.3, 90° 147.9/143.4, 15° 118.3/113.5; 3 µm none 151.0/149.2, 90° 151.3/149.6, 15° 115.2/111.0; 6 µm none 183.4/196.4, 90° 184.7/198.1, 15° 136.7/130.0 | agree within 1–5 %; 1D 7 % high only at 6 µm, no sound/90° (12 % on flat walls) |
+| **Case 4 status** | **COMPLETE (2026-11-03)** | growth 115–185 µm/s for every plug length, angle and wall shape: the plug always fills the slit within ~50–60 ms |
 
 ## 5. Side view: finite bubbles along the trench (etchsim/sideview.py)
 
