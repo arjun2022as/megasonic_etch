@@ -142,12 +142,14 @@ def layer_rates(z, er, L=P.L_SLIT):
 
 
 def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P.LAYER, dz=10e-9, dt_max=1e-3,
-             max_move=2.0, L=P.L_SLIT, log=None, sound=None, duty=None, rect=False, xi_vent=False, recess=0.0):
+             max_move=2.0, L=P.L_SLIT, log=None, sound=None, duty=None, rect=False, xi_vent=False, recess=0.0,
+             keep_profiles=False):
     """Run the nucleate-grow-vent cycle from a freshly refilled slit (liquid = mouth composition) at t = 0.
 
     s_nuc = inf: no bubbles (control). max_move: largest plug-top step per time step, in cells.
     sound = pulsation(f, I, theta) replaces `pump` and enables duty (intermittent sound), rect and xi_vent.
     recess > 0: comb walls; pockets beside the plug keep etching on stored etchant (sealed_pocket).
+    keep_profiles: also store the H2 saturation on the fixed grid z_ref after every step (NaN = gas), for maps.
     Returns the plug history, events and the time-averaged etch rate of every poly-Si layer.
     """
     zref = (np.arange(int(round(L / dz))) + 0.5) * dz             # fixed reference grid for averages
@@ -188,6 +190,8 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
         # ---- events and the next state
         pz = np.concatenate(([0.0], s.zc, [b]))                    # profile points incl. mouth and bottom
         pc = {k: np.concatenate(([surf[k]], c[k], c[k][-1:])) for k in SPECIES}
+        if keep_profiles:
+            hist[-1]["S"] = np.where(zref < b, np.interp(zref, pz, pc["H2"]), np.nan) / P.H2_SAT
         if not plug and h2max > s_nuc * P.H2_SAT:                   # nucleate a plug on the floor
             plug, b = True, L - l0
             events.append(("nucleate", t))
@@ -224,7 +228,7 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
     else:
         er_avg, span = er_int / t_end, (0.0, t_end)
     zl, erl = layer_rates(zref, er_avg)
-    return dict(hist=hist, events=events, z_layer=zl, er_layer=erl, t_end=t_end, avg_span=span)
+    return dict(hist=hist, events=events, z_layer=zl, er_layer=erl, t_end=t_end, avg_span=span, z_ref=zref)
 
 
 def summarise(run, t_from=None):
