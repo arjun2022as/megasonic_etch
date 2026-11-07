@@ -45,9 +45,31 @@ def c_sat(T):
     return P.H2_SAT * math.exp(VANT_HOFF_H2 * (1 / T - 1 / T60))
 
 
-def c_need(T, r_eff, p_amb=P.P_ATM):
-    """Dissolved H2 [mol/m3] that holds a gas surface of effective radius r_eff steady (see module doc)."""
-    return c_sat(T) * (p_amb + 2 * gamma_water(T) / r_eff - p_vap_water(T)) / P.P_ATM
+def c_need(T, r_eff, p_amb=P.P_ATM, p_other=0.0):
+    """Dissolved H2 [mol/m3] that holds a gas surface of effective radius r_eff steady (see module doc).
+    p_other: partial pressure of other dissolved gases (N2, O2, Ar) that the bubble also holds at equilibrium;
+    0 = fully degassed."""
+    return c_sat(T) * (p_amb + 2 * gamma_water(T) / r_eff - p_vap_water(T) - p_other) / P.P_ATM
+
+
+# ---------------------------------------------------------------- TMAH concentration
+M_WATER = 0.018015
+
+
+def rho_soln(w):
+    """kg/m3 at 60 C: 983.2 + 140 w (ASSUMED linear; 990 at 5 wt%, ~1018 at 25 wt%)."""
+    return P.RHO_L + 140.0 * w
+
+
+def c_oh_bulk(w):
+    return w * rho_soln(w) / P.M_TMAH
+
+
+def er_ref_conc(w):
+    """Bulk etch rate at w (mass fraction), from the model's own rate law r ~ [H2O]^4 [OH-]^(1/4) (Seidel 1990),
+    scaled to ER_ref = 300 nm/min at 5 wt% (ASSUMED). Peaks near 7 wt%, about half at 25 wt%."""
+    h2o = lambda x: (1 - x) * rho_soln(x) / M_WATER          # noqa: E731
+    return P.ER_REF * (h2o(w) / h2o(P.WT_TMAH)) ** 4 * (c_oh_bulk(w) / c_oh_bulk(P.WT_TMAH)) ** P.ORDER_OH
 
 
 # bubble-start levels (round seeds: 2 gamma / r, plug: 2 gamma / W)
@@ -61,7 +83,7 @@ def props_at(T):
                 gamma=gamma_water(T), p_vap=p_vap_water(T))
 
 
-def slit_h2(T=T60, rpm=P.SPIN_RPM, km_scale=1.0, er_scale=1.0, n=800, L=P.L_SLIT, pitch=P.PITCH):
+def slit_h2(T=T60, rpm=P.SPIN_RPM, km_scale=1.0, er_scale=1.0, n=800, L=P.L_SLIT, pitch=P.PITCH, w=P.WT_TMAH):
     """No-bubble quasi-steady slit at temperature T and spin rpm. km_scale multiplies the wafer-level k (e.g. extra
     film mixing); er_scale multiplies the reference etch rate (any chemistry change). Returns H2 at mouth/floor."""
     if abs((P.LAYER / (L / n)) - round(P.LAYER / (L / n))) > 1e-9:
@@ -69,7 +91,8 @@ def slit_h2(T=T60, rpm=P.SPIN_RPM, km_scale=1.0, er_scale=1.0, n=800, L=P.L_SLIT
     pr = props_at(T)
     om = P.omega_spin(rpm)
     km = {s: km_scale * P.levich_km(pr["D"][s], om, pr["nu"]) for s in ("OH", "SIL", "H2")}
-    s = Slit(n=n, D=pr["D"], er_ref=pr["er_ref"] * er_scale, km=km, L=L, pitch=pitch)
+    s = Slit(n=n, D=pr["D"], er_ref=pr["er_ref"] * er_scale * er_ref_conc(w) / P.ER_REF, km=km, L=L, pitch=pitch,
+             c_bulk=c_oh_bulk(w))
     r = s.solve()
     h2_max = r["h2_supersat"] * P.H2_SAT                     # mol/m3 (slit1d normalises by the 60 C value)
     return dict(T_C=T - 273.15, rpm=rpm, km_scale=km_scale, er_scale=er_scale,

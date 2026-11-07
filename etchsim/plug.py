@@ -95,9 +95,9 @@ def sound_on(t, duty):
 class PlugSlit(Slit):
     """Liquid column between the mouth (z = 0) and the plug top or the floor (z = b), one implicit time step."""
 
-    def __init__(self, b, surf, c_old, dt, plug, pump=None, dz=10e-9, c_bub=C_BUB):
+    def __init__(self, b, surf, c_old, dt, plug, pump=None, dz=10e-9, c_bub=C_BUB, er_ref=P.ER_REF, c_bulk=P.C_BULK):
         n = max(4, int(round(b / dz)))
-        super().__init__(n=n, L=b, km=None)
+        super().__init__(n=n, L=b, km=None, er_ref=er_ref, c_bulk=c_bulk)
         self.poly = layer_mask(self.zc)              # walls do not move: same layers at the same depth
         self.bulk = dict(surf)
         self.plug, self.dt, self.c_bub = plug, dt, c_bub
@@ -143,12 +143,13 @@ def layer_rates(z, er, L=P.L_SLIT):
 
 def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P.LAYER, dz=10e-9, dt_max=1e-3,
              max_move=2.0, L=P.L_SLIT, log=None, sound=None, duty=None, rect=False, xi_vent=False, recess=0.0,
-             keep_profiles=False):
+             keep_profiles=False, er_ref=P.ER_REF, c_bulk=P.C_BULK, c_bub=C_BUB):
     """Run the nucleate-grow-vent cycle from a freshly refilled slit (liquid = mouth composition) at t = 0.
 
     s_nuc = inf: no bubbles (control). max_move: largest plug-top step per time step, in cells.
     sound = pulsation(f, I, theta) replaces `pump` and enables duty (intermittent sound), rect and xi_vent.
     recess > 0: comb walls; pockets beside the plug keep etching on stored etchant (sealed_pocket).
+    er_ref, c_bulk: etch rate at bulk OH- and bulk OH- (other TMAH concentrations); c_bub: H2 held at the plug surface.
     keep_profiles: also store the H2 saturation on the fixed grid z_ref after every step (NaN = gas), for maps.
     Returns the plug history, events and the time-averaged etch rate of every poly-Si layer.
     """
@@ -167,8 +168,8 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
         on = sound is not None and plug and sound_on(t, duty)
         sv = sound(b, L - b) if on else None
         pd = sv["D"] if on else (pump(b, L - b) if (pump and plug) else None)
-        cb = C_BUB / np.sqrt(1 - sv["eps"] ** 2) if (on and rect) else C_BUB
-        s = PlugSlit(b, surf, state, dt, plug, pd, dz, cb)
+        cb = c_bub / np.sqrt(1 - sv["eps"] ** 2) if (on and rect) else c_bub
+        s = PlugSlit(b, surf, state, dt, plug, pd, dz, cb, er_ref, c_bulk)
         res = s.solve(guess=(x, surf) if x is not None and len(x) == 3 * s.n else
                       (np.concatenate([s.c_old[k] for k in SPECIES]), surf))
         c = res["c"]
@@ -176,11 +177,11 @@ def simulate(surf, pump=None, t_end=0.3, s_nuc=S_PLUG, l0=P.W_SLIT, b_vent=2 * P
         er_cells = np.interp(zref, s.zc, res["er"]) * (zref < b)    # dry under the plug (flat walls)
         if recess > 0:
             sealed = plug & (zref >= b)
-            c_mid = sealed_pocket(cp, recess, 0.5 * dt)             # rate at the step's midpoint
-            r_p = pocket_rate(c_mid) * poly_ref * sealed
+            c_mid = sealed_pocket(cp, recess, 0.5 * dt, er_ref, cb=c_bulk)   # rate at the step's midpoint
+            r_p = pocket_rate(c_mid, er_ref, cb=c_bulk) * poly_ref * sealed
             N_in = N_in + (2 * r_p * 2 * dz).sum() / P.W_SLIT        # pocket H2 into the plug, per slit area
             er_cells = er_cells + r_p / P.si_flux(1.0)
-            cp = np.where(sealed, sealed_pocket(cp, recess, dt), np.interp(zref, s.zc, c["OH"]))
+            cp = np.where(sealed, sealed_pocket(cp, recess, dt, er_ref, cb=c_bulk), np.interp(zref, s.zc, c["OH"]))
         growth = N_in / RHO_GAS                                     # m/s, plug length
         er_int += er_cells * dt
         t += dt

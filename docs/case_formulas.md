@@ -144,3 +144,15 @@ plug and side view (tables 4, 5), 5 = this table, 6 = bubble-free window (next).
 | Two-step recipe | step 1 bubble-free (25 C, 2000 rpm: 29.1 top / 28.8 bottom nm/min) for t1, then dR_bottom/dt = ER_bottom(R) at 60 C / 300 rpm with seeds | uniform recess, instant temperature switch ASSUMED |
 | 6C result | top recess 500 nm: bottom/top 0.46 (no step 1, 102 s) -> 0.79 / 0.87 / 0.93 / 0.96 with t1 = 15 / 30 / 60 / 120 s (116 / 129 / 156 / 210 s total) | ER_bottom(R) 3 / 11 / 23 / 44 / 90 / 140 / 232 / 269 / 286 nm/min at R = 0-300 nm |
 | Checks | water mu, gamma, p_vap, rho vs handbook at 25 / 60 C; levels 13.9x / 27x / 98.6x; floor vs hand formula (3 %); mouth ~ rpm^(-1/2) | tests/test_window.py |
+
+## 8. Lever study: megasonics vs TMAH concentration vs dissolved gas (run_levers.py; 60 C, 300 rpm, 1D)
+
+| What | Formula / principle | Notes |
+|---|---|---|
+| Megasonics summary | existing results only: Fluent case 3 (flat, comb), 1D sweep (summary.csv), case 4 cycle (plug_cycle.csv, realistic.csv), case 6B (600 rpm) | levers_megasonics.png |
+| Megasonics result | no bubbles: bottom/top never above no sound (flat 0.95713-0.95740 vs 0.95758; comb 0.95961-0.95989 vs 0.96021; 1D 0.9539-0.9575). Bubbles, seeds / 100x: no sound 2.98 / 28.81, real MegPie 2.98 / 28.85, 90 deg continuous 3.02 / 29.17, 15 deg continuous 3.83 / 54.47, 600 rpm 3.8 / 49.5 nm/min | 15 deg needs a tilt a meniscus-coupled MegPie cannot make |
+| Concentration rate law | ER_ref(w) = 300 nm/min ([H2O](w)/[H2O](5 %))^4 ([OH](w)/[OH](5 %))^(1/4); [H2O] = (1-w) rho/M_w, [OH] = w rho/M_TMAH, rho = 983.2 + 140 w | Seidel law ASSUMED for TMAH; peak ~7 wt%; 2/5/10/15/25 wt% -> 265/300/296/269/196 nm/min |
+| Concentration result | no bubbles bottom/top 0.918 / 0.958 / 0.977 / 0.986 / 0.993 at 2/5/10/15/25 wt%; floor H2 101/121/123/113/83x; bubbles, seeds: 2.6-3.0 nm/min at all; few seeds: 42/29/29/32/194 nm/min (25 wt% bubble-free) | water H2 solubility ASSUMED: salting-out (k_s 0.05-0.1 L/mol) would raise 25 wt% floor to ~115-160x and may close the window |
+| Dissolved gas | bubble gas holds p_other of N2/O2: c_need = c_sat (p_amb + 2 gamma/r - p_vap - p_other)/p_atm; plug surface c* lowered the same way | equilibrium with the bubble ASSUMED (upper bound) |
+| Gas result | plug level 13.9 / 12.9 / 11.9x and 13 nm level 98.4 / 97.4 / 96.4x for degassed / ~1 atm / ~2 atm; bottom etch seeds 3.01 / 2.96 / 2.85, few seeds 28.7 / 29.1 / 24.3 nm/min | degassing matters only if it removes seeds (not modelled; experiment) |
+| Checks | rate-law ratio vs hand calculation (25 vs 5 wt%); 1 atm of other gas = 1x c_sat less H2 needed; 5 wt% reproduces the baseline | tests/test_window.py |

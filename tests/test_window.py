@@ -39,6 +39,22 @@ def test_floor_matches_hand_formula_60C():
     assert r["S_mouth"] == pytest.approx(63.5, rel=0.02)
 
 
+def test_concentration_rate_law():
+    assert WN.c_oh_bulk(0.05) == pytest.approx(P.C_BULK, rel=1e-3)
+    assert WN.er_ref_conc(0.05) == pytest.approx(P.ER_REF, rel=1e-12)
+    # hand: 25 wt% vs 5 wt%: ([H2O] ratio)^4 * ([OH] ratio)^(1/4)
+    h = (0.75 * 1018.2) / (0.95 * 990.2)
+    o = (0.25 * 1018.2) / (0.05 * 990.2)
+    assert WN.er_ref_conc(0.25) / P.ER_REF == pytest.approx(h ** 4 * o ** 0.25, rel=2e-3)
+    assert WN.er_ref_conc(0.07) > WN.er_ref_conc(0.05) > WN.er_ref_conc(0.15) > WN.er_ref_conc(0.25)
+
+
+def test_other_gas_lowers_h2_needed_by_its_pressure():
+    T = 333.15
+    d = (WN.c_need(T, P.W_SLIT) - WN.c_need(T, P.W_SLIT, p_other=P.P_ATM)) / P.H2_SAT
+    assert d == pytest.approx(1.0, rel=1e-9)                       # 1 atm of N2/O2 = 1x saturation less H2
+
+
 def test_mouth_scales_with_inverse_sqrt_rpm():
     a, b = WN.slit_h2(rpm=300, n=400), WN.slit_h2(rpm=1200, n=400)
     assert a["c_mouth"] / b["c_mouth"] == pytest.approx(2.0, rel=0.03)
