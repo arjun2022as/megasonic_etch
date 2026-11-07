@@ -125,3 +125,22 @@ plug and side view (tables 4, 5), 5 = this table, 6 = bubble-free window (next).
 | Checks | sphere of W/2 feels exactly twice the plug's Laplace pressure; cap pressure from its own geometry = liquid S; no balance above S_max | tests/test_nanobubble.py |
 | Etch effect (run_nanobubble_etch.py) | caps cover a fraction phi of the poly wall where S <= S_max(L); rate, OH use and H2 made x (1 - phi) there; covered region solved self-consistently | phi swept 0/10/30 % (ASSUMED) |
 | Etch result | footprint 10 nm (stays small everywhere): rate -10 / -30 %, bottom/top 0.9575 -> 0.9615 / 0.9696 (less H2 and OH demand); 15 nm at 15 deg with 30 % cover also stays small (H2 drops to 85x < 88x); larger footprints run away to plugs below 0.2-5 um -> case 4 | small caps slow the etch, do not hurt uniformity |
+
+## 7. Case 6: bubble-free window and the two-step recipe (etchsim/window.py, run_case6.py)
+
+1D, laptop. 6A: no-bubble H2 vs spin speed (150-3000 rpm), temperature (20-60 C), chamber pressure (1-5 atm).
+6B: bubble cycle vs spin speed against 15 deg sound. 6C: gentle bubble-free pre-recess, then the full etch.
+
+| What | Formula / principle | Notes |
+|---|---|---|
+| Bubble-start level | c_need(r) = c_sat(T) (p_amb + 2 gamma(T)/r_eff - p_vap(T)) / p_atm; r_eff = W (plug), 50 nm, 13.4 nm (round seeds) | 9.71 mM = 13.9x / 27x / 100x at 60 C, 1 atm |
+| Chamber pressure | only adds (p_amb - p_atm)/p_atm saturations to every level; the H2 present does not change | 5 atm: plug level 13.9x -> 17.9x |
+| Temperature | ER_ref Arrhenius Ea 0.57 eV; D Stokes-Einstein with mu(T) Vogel fit; gamma IAPWS; p_vap Antoine; c_sat = 0.70 mM exp(530 K (1/T - 1/333.15)) | c_sat slope (Sander) ASSUMED for TMAH |
+| Wafer film | k_m = 0.62 D^(2/3) nu^(-1/6) Omega^(1/2) (Levich) at every spin speed | thin-film limits not modelled (ASSUMED) |
+| H2 present | c_floor ~ c_mouth + r L^2/(W D), c_mouth = 2 r L/(pitch k_m): mouth and in-slit parts each ~60x at 60 C / 300 rpm | in-slit part is untouched by spin or sound |
+| Window margin | c_need / c_max (> 1 bubble-free) | grid must tile the 50 nm layers (n = 400 or 1000) |
+| 6A result | seeds (13.9x): bubble-free only at 20 C >= 300 rpm (20 nm/min) or 25 C >= 1500 rpm (29 nm/min); 50 nm seed: <= 30-35 C; 13 nm seed (100x): 60 C >= 1000 rpm (floor 93x) or 55 C at 300 rpm | perfect film at 60 C still leaves 59x |
+| 6B result (bubbles on, 60 C) | bottom etch, seeds / 100x: 300 rpm 3.0 / 28.7; 15 deg sound 3.8 / 54.5; 600 rpm 3.8 / 49.5; 1000 rpm 4.1 / 283.6 (bubble-free); 3000 rpm 5.7 / 284.5 nm/min | 600 rpm = 15 deg; 1000 rpm >> 15 deg if seeds are few |
+| Two-step recipe | step 1 bubble-free (25 C, 2000 rpm: 29.1 top / 28.8 bottom nm/min) for t1, then dR_bottom/dt = ER_bottom(R) at 60 C / 300 rpm with seeds | uniform recess, instant temperature switch ASSUMED |
+| 6C result | top recess 500 nm: bottom/top 0.46 (no step 1, 102 s) -> 0.79 / 0.87 / 0.93 / 0.96 with t1 = 15 / 30 / 60 / 120 s (116 / 129 / 156 / 210 s total) | ER_bottom(R) 3 / 11 / 23 / 44 / 90 / 140 / 232 / 269 / 286 nm/min at R = 0-300 nm |
+| Checks | water mu, gamma, p_vap, rho vs handbook at 25 / 60 C; levels 13.9x / 27x / 98.6x; floor vs hand formula (3 %); mouth ~ rpm^(-1/2) | tests/test_window.py |
