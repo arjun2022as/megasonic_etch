@@ -40,7 +40,10 @@ PLUG = re.compile(r"PLUG H2_in ([-+0-9.eE]+) mol/s/m growth ([-+0-9.eE]+) um/s")
 def plug_line(case):
     """Last 'PLUG H2_in ... growth ...' line printed by the UDF report (transcript or SLURM log)."""
     hits = []
-    for fn in sorted(glob.glob(str(HERE / "results" / case / "*.txt"))) + sorted(glob.glob(str(HERE / "logs" / f"{case}_*.out"))):
+    # logs/<case>_<jobid>.out only: "<case>_*" would also match longer names (B0_floor_* -> B0_floor_r300_*)
+    logs = [fn for fn in glob.glob(str(HERE / "logs" / f"{case}_*.out"))
+            if re.fullmatch(re.escape(case) + r"_\d+\.out", Path(fn).name)]
+    for fn in sorted(glob.glob(str(HERE / "results" / case / "*.txt"))) + sorted(logs, key=lambda f: Path(f).stat().st_mtime):
         try:
             hits += PLUG.findall(Path(fn).read_text(errors="ignore"))
         except OSError:
