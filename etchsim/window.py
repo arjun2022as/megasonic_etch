@@ -83,14 +83,17 @@ def props_at(T):
                 gamma=gamma_water(T), p_vap=p_vap_water(T))
 
 
-def slit_h2(T=T60, rpm=P.SPIN_RPM, km_scale=1.0, er_scale=1.0, n=800, L=P.L_SLIT, pitch=P.PITCH, w=P.WT_TMAH):
+def slit_h2(T=T60, rpm=P.SPIN_RPM, km_scale=1.0, er_scale=1.0, n=800, L=P.L_SLIT, pitch=P.PITCH, w=P.WT_TMAH,
+            h2_only=False):
     """No-bubble quasi-steady slit at temperature T and spin rpm. km_scale multiplies the wafer-level k (e.g. extra
-    film mixing); er_scale multiplies the reference etch rate (any chemistry change). Returns H2 at mouth/floor."""
+    film mixing; h2_only: only for H2, e.g. bubbles taking up H2); er_scale multiplies the reference etch rate (any
+    chemistry change). Returns H2 at mouth/floor."""
     if abs((P.LAYER / (L / n)) - round(P.LAYER / (L / n))) > 1e-9:
         raise ValueError(f"n = {n}: cells must tile the {P.LAYER * 1e9:g} nm layers")
     pr = props_at(T)
     om = P.omega_spin(rpm)
-    km = {s: km_scale * P.levich_km(pr["D"][s], om, pr["nu"]) for s in ("OH", "SIL", "H2")}
+    km = {s: (km_scale if (s == "H2" or not h2_only) else 1.0) * P.levich_km(pr["D"][s], om, pr["nu"])
+          for s in ("OH", "SIL", "H2")}
     s = Slit(n=n, D=pr["D"], er_ref=pr["er_ref"] * er_scale * er_ref_conc(w) / P.ER_REF, km=km, L=L, pitch=pitch,
              c_bulk=c_oh_bulk(w))
     r = s.solve()
