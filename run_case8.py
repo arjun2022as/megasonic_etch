@@ -34,7 +34,8 @@ CONDS = [
 
 # 2D Fluent fixed-plug results (STATUS.md 2026-11-01..03; Puma logs "PLUG ... growth"): growth um/s
 FLUENT_GROWTH = {
-    "flat": {"1 um": (None, 143.0, 115.0), "3 um": (145.0, 146.0, 111.0), "6 um": (175.0, 176.0, 129.0)},
+    # make_case8.py on Puma, results/case8/case8_table.csv (2026-11-09); flat 1 um no sound ran before the PLUG report
+    "flat": {"1 um": (None, 143.0, 115.3), "3 um": (145.2, 145.5, 111.2), "6 um": (175.0, 176.2, 129.4)},
     "comb 300 nm": {"1 um": (147.7, 147.9, 118.3), "3 um": (151.0, 151.3, 115.2), "6 um": (183.4, 184.7, 136.7)},
 }
 FLUENT_MOUTH_X = (63.5, 63.5, 43.0)          # mouth H2 used as the Fluent boundary value (cases.csv)

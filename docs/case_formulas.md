@@ -173,3 +173,14 @@ plug and side view (tables 4, 5), 5 = this table, 6 = bubble-free window (next).
 | Scenario result (bottom etch seeds / few seeds, quasi-steady over a turn) | no sound 3.01 / 28.7; stirring 15 um 3.14 / 30.7; uptake 1000 /mm2 3.49 / 56.8; perfect renewal under MegPie 4.34 / 186.8 (worst floor 108.5x: plugs still form every turn); for reference 15 deg 3.76 / 48.2, 600 rpm 3.74 / 43.9 | quasi-steady interpolation is optimistic |
 | Seeds under the sound | eps = p_a / (3 p_g): 50 nm 0.040-0.056, 13 nm 0.011-0.015; level shift ~3 eps^2 < 1 %; p_a 0.32-0.46 MPa < p_g 2.7-10 MPa (no collapse) | sound does not lower the bubble levels |
 | Checks | Levich from near-wall formula; Homann by shooting; Leveque mean by quadrature; Eckart profile (no net flux, wall shear, force balance); Minnaert without gamma; film continuous limits (analytic) and recovery (semi-infinite 2 J sqrt(t/(pi D))); infinite renewal leaves floor = in-slit rise | tests/test_normal.py (9) |
+
+## 10. Case 8: bubbles with no sound vs vertical (90 deg) vs horizontal (15 deg) sound (make_case8.py on Puma, run_case8.py; 1 MHz, 2 W/cm2, 60 C, 300 rpm)
+
+| What | Formula / principle | Notes |
+|---|---|---|
+| Horizontal = 15 deg | u_t = U0 sin(beta) abs(1+R): 0 at 90 deg, 0.311 m/s at 15 deg, peak 0.314 near 10 deg, 0 at grazing (R -> -1) | no new Fluent angle needed; tilt not reachable with a meniscus-coupled MegPie |
+| ANSYS comparison | existing fixed-plug runs, flat and comb 300 nm x 1/3/6 um x none/90/15; same colour scale; difference from the no-sound run on the same mesh; growth = N_H2/(rho_g W) from each run's own PLUG log line | logs/<case>_<jobid>.out only (prefix glob matched longer names: fixed) |
+| ANSYS result | growth none/90/15 (um/s): flat 1 um n/a/143.0/115.3, 3 um 145.2/145.5/111.2, 6 um 175.0/176.2/129.4; comb 147.7/147.9/118.3, 151.0/151.3/115.2, 183.4/184.7/136.7; mouth H2 56-63x (none = 90) -> 42-43x (15); plug top 13.9x in all 18; wet bottom/top changes < 0.001 | vertical = no sound within 0.7 % |
+| Cycle on comb walls | case 4 1D cycle, s_nuc 13.9x, recess 0-300 nm, sound with pumping + rectified + early vent; real MegPie duty 33 of 200 ms | mouth 63x (none, 90) or 43x (15 deg, cases.csv A_f1_I2_t15) |
+| Cycle result | bottom nm/min at R 0/10/20/50/100/300: none = real MegPie 2.98/43.7/90.1/232.0/269.1/286.3; 90 continuous 3.02/44.3/91.3/233.3/269.4/286.4; 15 deg 3.84/33.6/68.4/189.3/262.7/285.5; cycle 48.6 -> 68.1 ms (R 0), 37.3 -> 47.6 ms (R 300) | slower plug = fewer refills; shallow pockets empty in ~8 ms (10 nm) |
+| Start-up | dR/dt = ER_bottom(R) from 0 nm: 1 / 2 min bottom 41.8 / 311.7 (none, real MegPie), 44.5 / 316.0 (90 cont.), 23.2 / 253.3 nm (15 deg); from 5 nm: 462 / 462 / 465 / 410 nm | horizontal -19 % with seeds; few seeds (100x, flat): 28.8 -> 54.5 nm/min (case 4) |
