@@ -36,11 +36,30 @@ from fluent2d.params import GAP, PHASE_B, header  # noqa: E402
 from etchsim import acoustics as A  # noqa: E402
 from etchsim import props as P  # noqa: E402
 from run_case import MAX_EXTRA_BLOCKS, metrics, read_dumps  # noqa: E402
+import analyze_resolved as AR  # noqa: E402
 
 CASES_CSV = HERE / "cases_resolved.csv"
 FLUID_ZONES = ("bulk", "slit", "pocket")
 STEPS_PER_CYCLE, SAMPLE_EVERY, LOG_EVERY_CYCLES = 40, 4, 50
 N_UDM = 19
+# numerics test (--numerics-test, fix 2026-11-27): label, iterations per step, explicit momentum/pressure relaxation
+# (None = Fluent default); riskiest last. Each runs NT_SETTLE + NT_MEASURE cycles and is scored against the exact
+# Stokes layer (analyze_resolved.stokes_metrics). Pass: bulk amplitude within 1 %, wall shear within 3 % of exact.
+NUMERICS = [("C10", 10, None), ("C40", 40, None), ("C100", 100, None), ("C20_relax1", 20, 1.0)]
+NT_SETTLE, NT_MEASURE = 5, 5
+PASS_BULK, PASS_SHEAR = 0.01, 0.03     # bulk judged against bdf2_amp(spc), not 1 (review 2026-11-27)
+
+
+def bdf2_amp(spc):
+    """amplitude a perfectly converged 2nd-order implicit (BDF2) step gives a forced oscillation: 0.9919 at 40
+    steps per cycle, 0.9980 at 80 (|i w dt / (3 - 4 z^-1 + z^-2)/2|, z = e^(i w dt))"""
+    wdt = 2 * math.pi / spc
+    z = complex(math.cos(wdt), math.sin(wdt))
+    return abs(1j * wdt / ((3 - 4 / z + 1 / z ** 2) / 2))
+
+
+def stokes_pass(sc, spc):
+    return (abs(sc["bulk"] / bdf2_amp(spc) - 1) < PASS_BULK and abs(sc["wall_shear"] - 1) < PASS_SHEAR)
 
 
 def load(name, path):
@@ -100,9 +119,26 @@ def mesh_args(p, out):
             "--dy-top", str(m["dy_top"]), "--ratio", str(m["ratio"]), "--periodic-sides", "-o", str(out)]
 
 
+def pin_top(p):
+    """Top row held at the no-sound film values at the height of its centroids (fix 2026-11-27: Fluent did not apply
+    the inlet's UDS Specified Value as a Dirichlet condition). Penalty rate 100 D_BASE / h_top^2."""
+    mi = p["mesh_info"]
+    p["H_bc"] = mi["y_top_cell"]
+    p["c_top"], _ = top_values(p["H_bc"])
+    p["top_pin_k"] = 100.0 * max(P.D[k] for k in ("OH", "SIL", "H2")) / mi["h_top_cell"] ** 2
+
+
+def production(er_nm_min):
+    """H2 made per second in one pitch [mol/s per m depth]: 2 H2 per Si, both walls of every poly layer
+    (same formula as analyze_resolved.production x pitch)"""
+    n_poly = round(P.L_SLIT / P.LAYER) // 2
+    return 2 * er_nm_min / 6e10 * P.RHO_SI / P.M_SI * (2 * n_poly * P.LAYER)
+
+
 def header_resolved(p):
     extra = dict(U_T=p["u_t"], P_WALL=p["p_wall"], C_SOUND_L=P.C_SOUND, ROW1_Y=p["mesh"]["dy_top"],
-                 DY_SLIT=p["mesh"]["dy"])
+                 DY_SLIT=p["mesh"]["dy"], TOP_ID=mesh2d.TOP_ID, TOP_PIN_K=p["top_pin_k"],
+                 PIN_C_OH=p["c_top"]["OH"], PIN_C_SIL=p["c_top"]["SIL"], PIN_C_H2=p["c_top"]["H2"])
     return header(p) + "".join(f"#define {k} {v:.12g}\n" for k, v in extra.items())
 
 
@@ -160,6 +196,61 @@ def solver_methods(solver, s):
         api.log("methods state not readable:", e)
 
 
+def set_relax(s, value):
+    """explicit momentum and pressure relaxation of the Coupled solver (None: leave as is); state logged"""
+    pv = api.pick(s.solution.controls, "p_v_controls", "pressure_velocity_coupling_controls")
+    if value is not None:
+        for name in ("explicit_momentum_under_relaxation", "explicit_pressure_under_relaxation"):
+            try:
+                api.setv(getattr(pv, name), value)
+            except Exception as e:  # noqa: BLE001
+                api.log(f"WARNING: {name} not set: {e}")
+    try:
+        api.log("p-v controls:", pv.get_state())
+    except Exception as e:  # noqa: BLE001
+        api.log("p-v controls not readable:", e)
+
+
+def score_rows(out, prefix, p):
+    rows = AR.read_csvs(out, f"{prefix}[0-9]*.csv")
+    return AR.stokes_metrics(rows, p["u_t"], p["delta"], p["H"])
+
+
+def numerics_test(solver, s, p, out, rc, ne, t_sim):
+    """sound on exactly as in production (oscillating top u, compression outflow v_top, same t0), then each
+    NUMERICS setting in turn: settle, measure, score against the exact Stokes layer"""
+    res = []
+    u1, v1 = expressions(p, t_sim, 1, 1)
+    ne["u_top"] = {"definition": u1}
+    ne["v_top"] = {"definition": v1}
+    api.on_demand(solver, "sound_on")
+    api.setv(rc.time_step_size, p["dt"])
+    spc, se = p["spc"], p["sample_every"]
+    for label, iters, relax in NUMERICS:
+        try:
+            set_relax(s, relax)
+        except Exception as e:  # noqa: BLE001
+            api.log(f"WARNING: relaxation controls not found ({e}); {label} runs with the current ones")
+        t_w = time.time()
+        api.iterate(solver, NT_SETTLE * spc, iters)
+        api.on_demand(solver, "start_rows")
+        for _ in range(NT_MEASURE * spc // se):
+            api.iterate(solver, se, iters)
+            api.on_demand(solver, "acc_rows")
+        api.on_demand(solver, "dump_rows")
+        collect(out, "rows_[0-9]*.csv", f"rows_N{label}_")
+        sc = score_rows(out, f"rows_N{label}_", p)
+        sec = (time.time() - t_w) / ((NT_SETTLE + NT_MEASURE) * spc)
+        ok = stokes_pass(sc, spc)
+        res.append(dict(label=label, iters=iters, relax=relax, s_per_step=sec, passed=ok, **sc))
+        api.log(f"NUMERICS {label}: bulk/u_t {sc['bulk']:.4f} (converged BDF2 {bdf2_amp(spc):.4f}), wall shear/exact {sc['wall_shear']:.4f}, "
+                f"1 % layer/exact {sc['layer']:.4f}, profile err {sc['profile_err']:.4f}, {sec:.2f} s/step "
+                f"-> {'PASS' if ok else 'fail'}")
+        (out / "numerics_test.json").write_text(json.dumps(res, indent=1))
+    api.on_demand(solver, "sound_off")
+    return res
+
+
 def collect(out, pattern, new_prefix):
     """rename the per-process files of the last dump (rows_<id>.csv -> rows_B_<id>.csv)"""
     for fn in glob.glob(str(out / pattern)):
@@ -167,14 +258,18 @@ def collect(out, pattern, new_prefix):
         q.replace(q.with_name(new_prefix + q.name.split("_", 1)[1]))
 
 
-def mouth_now(out):
-    s_row = l_row = s_slit = n_slit = 0.0
+def mouth_now(out, full=False):
+    """first-row mean and slit-top c_H2; with full=True also the H2 leaving through the pinned top row
+    [mol/s per m] and the top row's mean c_H2"""
+    s_row = l_row = s_slit = n_slit = out_h2 = s_top = v_top = 0.0
     for fn in glob.glob(str(out / "mouth_*.csv")):
         with open(fn, newline="") as f:
             r = next(csv.DictReader(f))
         s_row += float(r["s_row"]); l_row += float(r["l_row"])
         s_slit += float(r["s_slit"]); n_slit += float(r["n_slit"])
-    return (s_row / l_row if l_row else float("nan"), s_slit / n_slit if n_slit else float("nan"))
+        out_h2 += float(r["out_h2"]); s_top += float(r["s_top"]); v_top += float(r["v_top"])
+    res = (s_row / l_row if l_row else float("nan"), s_slit / n_slit if n_slit else float("nan"))
+    return res + (out_h2, s_top / v_top if v_top else float("nan"), v_top) if full else res
 
 
 def main():
@@ -184,20 +279,31 @@ def main():
     ap.add_argument("--setup-only", action="store_true")
     ap.add_argument("--plan-only", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--numerics-test", action="store_true",
+                    help="full phase B (checks the top fix), then the NUMERICS settings with sound; no phase S")
+    ap.add_argument("--iters", type=int, help="iterations per sound step (overrides cases_resolved.csv)")
+    ap.add_argument("--relax", type=float, help="explicit momentum/pressure relaxation of the Coupled solver")
     a = ap.parse_args()
 
     p = plan(load(a.case, CASES_CSV))
-    out = (HERE / "results" / f"{a.case}{'_test' if a.setup_only else ''}").resolve()
+    if a.iters:
+        p["iters"] = a.iters
+    p["relax"] = a.relax
+    tag = "_test" if a.setup_only else "_numerics" if a.numerics_test else ""
+    out = (HERE / "results" / f"{a.case}{tag}").resolve()
     msh = out / f"{a.case}.msh"
     if a.plan_only:
         api.log("plan", json.dumps(p, indent=1, default=str))
         return
+    if a.numerics_test and not p["u_t"] > 0:
+        raise SystemExit("--numerics-test needs a case with tangential slip (u_t > 0), e.g. R15_flat")
     if (out / "summary.json").exists() and not (a.force or a.setup_only):
         raise SystemExit(f"{out} already has a finished run; use --force")
     out.mkdir(parents=True, exist_ok=True)
     for old in [*out.glob("dump_*.csv"), *out.glob("field_*.csv"), *out.glob("rows_*.csv"), *out.glob("mouth_*.csv")]:
         old.unlink()
     p["mesh_info"] = mesh2d.main(mesh_args(p, msh))
+    pin_top(p)
     # compression: all the liquid in the cell is squeezed, the same volume leaves through the top
     p["v_top_amp"] = (p["omega"] * p["p_wall"] * p["mesh_info"]["liquid_area"]
                       / (P.RHO_L * P.C_SOUND ** 2 * P.PITCH))
@@ -231,6 +337,12 @@ def main():
         api.compile_load_udf(solver, out)
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
         solver_methods(solver, s)
+        try:
+            set_relax(s, a.relax)
+        except Exception as e:  # noqa: BLE001
+            if a.relax is not None:
+                raise
+            api.log("p-v controls not found (default relaxation kept):", e)
         api.first_ok("early initialization", lambda: s.solution.initialization.standard_initialize())
         d_base = max(P.D[k] for k in ("OH", "SIL", "H2"))
         api.uds_diffusivity(solver, mat, [P.RHO_L * d_base] * 3)
@@ -261,6 +373,7 @@ def main():
 
         # ---------------- phase B: no sound, quasi-steady
         hist, t_sim = [], 0.0
+        p["settled_B"] = True
 
         def stages():
             yield from PHASE_B
@@ -269,10 +382,12 @@ def main():
                 if (abs(h1["uniformity"] - h0["uniformity"]) < 1e-4
                         and abs(h1["c_oh_bottom"] - h0["c_oh_bottom"]) < 1e-4 * max(abs(h1["c_oh_bottom"]), 1.0)
                         and abs(h1["c_sil_bottom"] - h0["c_sil_bottom"]) < 5e-4 * max(abs(h1["c_sil_bottom"]), 1.0)
-                        and abs(h1["c_h2_mouth"] - h0["c_h2_mouth"]) < 1e-4 * max(abs(h1["c_h2_mouth"]), 1.0)):
+                        and abs(h1["c_h2_mouth"] - h0["c_h2_mouth"]) < 1e-4 * max(abs(h1["c_h2_mouth"]), 1.0)
+                        and abs(h1["out_over_made"] - 1.0) < 5e-3 and abs(h1["top_err"]) < 1e-3):
                     return
                 yield 1e-3, 50
             api.log(f"WARNING: not settled after {MAX_EXTRA_BLOCKS} extra 50 ms blocks")
+            p["settled_B"] = False
 
         for dt, n in stages():
             n = 2 if a.setup_only else n
@@ -282,11 +397,18 @@ def main():
             api.on_demand(solver, "dump")
             api.on_demand(solver, "dump_mouth")
             m = metrics(*read_dumps(out))
-            mrow, mslit = mouth_now(out)
-            hist.append(dict(t=t_sim, dt=dt, c_h2_mouth=mrow, c_h2_slit_top=mslit,
+            mrow, mslit, h2_out, c_toprow, v_toprow = mouth_now(out, full=True)
+            v_expect = P.PITCH * p["mesh_info"]["h_top_cell"]
+            if abs(v_toprow / v_expect - 1) > 1e-3:     # the pin must act on exactly the top row (zone-id check)
+                raise RuntimeError(f"pinned volume {v_toprow:.6g} m2 != pitch x top cell {v_expect:.6g} m2")
+            made = production(m["er_mean_nm_min"])
+            hist.append(dict(t=t_sim, dt=dt, c_h2_mouth=mrow, c_h2_slit_top=mslit, h2_out=h2_out, h2_made=made,
+                             out_over_made=h2_out / made if made else float("nan"),
+                             top_err=c_toprow / p["c_top"]["H2"] - 1,
                              **{k: v for k, v in m.items() if k != "layers"}))
             api.log(f"phase B t = {t_sim:.4g} s: bottom/top {m['uniformity']:.5f}, H2 first-row mean {mrow:.3f} mM "
-                    f"({mrow / P.H2_SAT:.2f}x), slit top {mslit:.3f} mM, c_SIL bottom {m['c_sil_bottom']:.1f}")
+                    f"({mrow / P.H2_SAT:.2f}x), slit top {mslit:.3f} mM, c_SIL bottom {m['c_sil_bottom']:.1f}; "
+                    f"H2 out/made {hist[-1]['out_over_made']:.4f}, top row {c_toprow:.4f} vs pin {p['c_top']['H2']:.4f} mM")
         # baseline rows (steady): a few samples with the same measurement
         api.on_demand(solver, "start_rows")
         api.setv(rc.time_step_size, 1e-4)
@@ -295,15 +417,17 @@ def main():
             t_sim += 1e-4
             api.on_demand(solver, "acc_rows")
         api.on_demand(solver, "dump_rows")
-        collect(out, "rows_*.csv", "rows_B_")
+        collect(out, "rows_[0-9]*.csv", "rows_B_")
         api.on_demand(solver, "dump_field")
-        collect(out, "field_*.csv", "field_B_")
+        collect(out, "field_[0-9]*.csv", "field_B_")
         result_B = metrics(*read_dumps(out))
         api.first_ok("write case/data B", lambda: s.file.write(file_type="case-data", file_name=f"{a.case}-B.cas.h5"))
 
         # ---------------- phase S: sound on, resolved
-        mouth_log = []
-        if p["sound"]:
+        mouth_log, numerics = [], None
+        if a.numerics_test:
+            numerics = numerics_test(solver, s, p, out, rc, ne, t_sim)
+        elif p["sound"]:
             t0 = t_sim            # sound_on stores Fluent's own flow time as t0 for the sources (same value)
             u1, v1 = expressions(p, t0, 1, 1)
             ne["u_top"] = {"definition": u1}
@@ -335,12 +459,17 @@ def main():
                     api.log(f"phase S measure: sample {k + 1}/{n_samples}, H2 first-row mean {mrow:.3f} mM, slit top {mslit:.3f} mM")
             api.on_demand(solver, "finish_avg")                        # closure D_osc, for comparison only
             api.on_demand(solver, "dump_rows")
-            collect(out, "rows_*.csv", "rows_S_")
+            collect(out, "rows_[0-9]*.csv", "rows_S_")
+            sc = score_rows(out, "rows_S_", p)
+            p["stokes_metrics_S"] = sc
+            api.log(f"phase S numerics: bulk/u_t {sc['bulk']:.4f}, wall shear/exact {sc['wall_shear']:.4f}, "
+                    f"1 % layer/exact {sc['layer']:.4f}" + ("" if p["u_t"] > 0 else " (no slip: not applicable)"))
+            p["stokes_pass_S"] = stokes_pass(sc, p["spc"]) if p["u_t"] > 0 else None
             # whole number of cycles since sound_on: the liquid is back where it started (displacement
             # (u_t/w)(1 - cos)), so this snapshot is phase-matched with field_B (review A2: compare spreads here,
             # not on cycle-averaged values, which a sliding field blurs)
             api.on_demand(solver, "dump_field")
-            collect(out, "field_*.csv", "field_S_")
+            collect(out, "field_[0-9]*.csv", "field_S_")
             api.on_demand(solver, "clear_dosc")                        # closure value must not act on a restart
             api.on_demand(solver, "sound_off")
             api.first_ok("write case/data S",
@@ -350,6 +479,8 @@ def main():
         m = metrics(*read_dumps(out))
         p.update(result_B={k: v for k, v in result_B.items() if k != "layers"},
                  result_end={k: v for k, v in m.items() if k != "layers"}, history_B=hist, mouth_log=mouth_log,
+                 numerics_test=numerics,
+                 valid=bool(p["settled_B"] and not a.setup_only and p.get("stokes_pass_S") is not False),
                  setup_only=a.setup_only, wall_s=time.time() - t0_wall)
         (out / "summary.json").write_text(json.dumps(p, indent=1, default=str))
         api.log("done", a.case, f"wall {p['wall_s'] / 3600:.2f} h")

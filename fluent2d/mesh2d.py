@@ -32,6 +32,7 @@ CELL_ZONES = [(2, "bulk"), (3, "slit"), (4, "pocket")]
 FACE_ZONES = [(5, "interior", "interior"), (6, "inlet", "velocity-inlet"), (7, "outlet", "pressure-outlet"),
               (8, "top", "velocity-inlet"), (9, "wafer-top", "wall"), (10, "oxide", "wall"), (11, "poly", "wall"),
               (12, "bubble", "wall"), (13, "bubble-pocket", "wall")]
+TOP_ID = 8                                                        # zone "top" in FACE_ZONES
 POLY_ID, OXIDE_ID, BUBBLE_ID, BUBBLE_POCKET_ID = 11, 10, 12, 13   # pocket mouths facing a plug get their own zone:
 # Fluent splits a wall zone that borders two cell zones (slit, pocket) and renumbers the second part
 
@@ -260,7 +261,8 @@ def main(argv=None):
     area = sum((xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]) for i, j, _ in cells)
     info = dict(liquid_area=area, n_cells=len(cells), n_nodes=len(nodes), cell_zones=czones, poly_faces=len(zones[POLY_ID]),
                 X0=ext["X0"], X1=ext["X1"], H=a.H, W=a.W, L=a.L, recess=a.recess, dx=a.dx, dy=a.dy,
-                bubble_top=a.bubble_top, bubble_len=a.bubble_len, bubble_faces=len(zones[BUBBLE_ID]) + len(zones[BUBBLE_POCKET_ID]))
+                bubble_top=a.bubble_top, bubble_len=a.bubble_len, bubble_faces=len(zones[BUBBLE_ID]) + len(zones[BUBBLE_POCKET_ID]),
+                y_top_cell=0.5 * (ys[-2] + ys[-1]), h_top_cell=ys[-1] - ys[-2])
     print(json.dumps(info))
     return info
 

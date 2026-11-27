@@ -224,7 +224,9 @@ DEFINE_ON_DEMAND(dump_rows)
 }
 
 /* mouth_<id>.csv: length-weighted sum of the INSTANTANEOUS c_H2 in the first liquid row above the wafer and at
-   the slit top, so run_resolved.py can log how the mouth H2 drifts while the sound is on */
+   the slit top, so run_resolved.py can log how the mouth H2 drifts while the sound is on; plus the H2 that leaves
+   through the pinned top row (integral of the pin source, mol/s per m depth) and the top row's volume-weighted
+   c_H2 (must equal PIN_C_H2) */
 DEFINE_ON_DEMAND(dump_mouth)
 {
 #if !RP_HOST
@@ -234,6 +236,7 @@ DEFINE_ON_DEMAND(dump_mouth)
     char name[64];
     FILE *fp;
     real x[ND_ND], s_row = 0.0, l_row = 0.0, s_slit = 0.0, n_slit = 0.0;
+    real out_h2 = 0.0, s_top = 0.0, v_top_ = 0.0;     /* H2 leaving through the pinned top row; its mean c */
 #if PARALLEL
     int id = myid;
 #else
@@ -246,6 +249,13 @@ DEFINE_ON_DEMAND(dump_mouth)
         begin_c_loop_int(c, t)
         {
             C_CENTROID(x, c, t);
+            if (top_cell(c, t))
+            {
+                real vol = C_VOLUME(c, t);
+                out_h2 += TOP_PIN_K * (cell_c(c, t, 2) - PIN_C_H2) * vol;   /* mol/s per m depth */
+                s_top += cell_c(c, t, 2) * vol;
+                v_top_ += vol;
+            }
             if (x[1] > 0.0 && x[1] < ROW1_Y)
             {
                 real w = C_VOLUME(c, t);
@@ -265,7 +275,8 @@ DEFINE_ON_DEMAND(dump_mouth)
     fp = fopen(name, "w");
     if (fp == NULL)
         return;
-    fprintf(fp, "s_row,l_row,s_slit,n_slit\n%.12e,%.12e,%.12e,%g\n", s_row, l_row, s_slit, n_slit);
+    fprintf(fp, "s_row,l_row,s_slit,n_slit,out_h2,s_top,v_top\n%.12e,%.12e,%.12e,%g,%.12e,%.12e,%.12e\n", s_row,
+            l_row, s_slit, n_slit, out_h2, s_top, v_top_);
     fclose(fp);
 #endif
 }

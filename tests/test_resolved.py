@@ -95,3 +95,49 @@ def test_top_values_between_mouth_and_bulk():
     assert 0 < tops["H2"] < cs["H2"]
     k = P.levich_km(DH2, P.omega_spin())
     assert abs(tops["H2"] - cs["H2"] * (1 - k * 10e-6 / DH2)) < 1e-12
+
+
+def _stokes_rows(u_t, delta, H, amp=1.0, ny=400):
+    """mid-pitch column with the exact Stokes amplitude (scaled by amp) and its face shear on a uniform grid"""
+    dy, rows = H / ny, []
+    for j in range(ny):
+        y = (j + 0.5) * dy
+        yf = (j + 1) * dy
+        rows.append(dict(x=-0.4475e-6, y=y, y_face=yf, len=5e-9,
+                         u_amp=amp * u_t * abs(1 - cmath.exp(-(1 + 1j) * y / delta)),
+                         shear_amp=amp * u_t * math.sqrt(2) / delta * math.exp(-yf / delta)))
+    return rows
+
+
+def test_stokes_metrics_exact_and_deficit():
+    """exact layer scores 1 / 1 / ~1; the first set's 20 % deficit is caught"""
+    u_t, delta, H = 0.3106, 0.3886e-6, 10e-6
+    m = AR.stokes_metrics(_stokes_rows(u_t, delta, H), u_t, delta, H)
+    assert abs(m["bulk"] - 1) < 1e-3 and abs(m["wall_shear"] - 1) < 1e-9 and abs(m["layer"] - 1) < 0.02
+    assert m["profile_err"] < 1e-12
+    bad = AR.stokes_metrics(_stokes_rows(u_t, delta, H, amp=0.8), u_t, delta, H)
+    assert abs(bad["bulk"] - 0.8) < 1e-3 and abs(bad["wall_shear"] - 0.8) < 1e-9
+
+
+def test_production_same_in_driver_and_analysis():
+    assert abs(RR.production(300.0) / P.PITCH - AR.production(dict(result_B=dict(er_mean_nm_min=300.0)))) < 1e-15
+
+
+def test_pin_top_values_and_header():
+    p = RR.plan(RR.load("R15_flat", RR.CASES_CSV))
+    p["mesh_info"] = dict(y_top_cell=9.95e-6, h_top_cell=0.1e-6)
+    RR.pin_top(p)
+    tops, _ = RR.top_values(9.95e-6)
+    assert p["H_bc"] == 9.95e-6 and p["c_top"] == tops
+    assert abs(p["top_pin_k"] - 100 * max(P.D[k] for k in ("OH", "SIL", "H2")) / 1e-14) < 1e-3
+    h = RR.header_resolved(p)
+    for k in ("TOP_ID 8", "TOP_PIN_K", "PIN_C_OH", "PIN_C_SIL", "PIN_C_H2"):
+        assert f"#define {k}" in h
+
+
+def test_bdf2_amplitude_and_pass_rule():
+    """converged BDF2 gives 0.9919 u_t at 40 steps/cycle (independent route: Richardson-like small-step limit -> 1)"""
+    assert abs(RR.bdf2_amp(40) - 0.991912) < 1e-6 and abs(RR.bdf2_amp(80) - 0.997952) < 1e-6
+    assert abs(RR.bdf2_amp(100000) - 1) < 1e-8          # error ~ (w dt)^2 / 3 ~ 1.3e-9
+    assert RR.stokes_pass(dict(bulk=0.9919, wall_shear=0.99), 40)
+    assert not RR.stokes_pass(dict(bulk=0.801, wall_shear=0.893), 40)

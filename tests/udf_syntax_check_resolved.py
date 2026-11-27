@@ -13,6 +13,8 @@ import run_resolved as RR  # noqa: E402
 def main():
     from clang import cindex
     p = RR.plan(RR.load("R15_comb", RR.CASES_CSV))
+    p["mesh_info"] = dict(y_top_cell=9.953e-6, h_top_cell=0.094e-6)     # as meshed (top-row pin, 2026-11-27)
+    RR.pin_top(p)
     src = (ROOT / "fluent2d" / "udf" / "etch.c").read_text()
     src = src.replace('#include "etch_params.h"', RR.header_resolved(p)) + "\n" + \
         (ROOT / "fluent2d" / "udf" / "resolved_extra.c").read_text()

@@ -315,6 +315,30 @@ static real face_source(cell_t c, Thread *t, int i, real *dsdphi)
     return s / C_VOLUME(c, t);
 }
 
+#ifdef TOP_PIN_K
+/* Case 10 (run_resolved.py, 2026-11-27): the top boundary is a velocity inlet whose normal velocity is zero in the
+ * no-sound phase, and Fluent 24.1 did NOT apply the UDS "Specified Value" there as a Dirichlet condition (first
+ * full set: top cell H2 516 mM against 36 mM set; no H2 left the cell). So the cells of the top row (one face on
+ * zone TOP_ID) are held at PIN_C_* by the implicit penalty source -TOP_PIN_K (c - c_pin) [mol/m3/s]; TOP_PIN_K =
+ * 100 D_BASE / h_top^2 (100x the diffusion rate across the cell), so c - c_pin = flux / (TOP_PIN_K V) is ~1e-5 of c.
+ * The integral of that source over the row is the H2 that leaves the cell (dump_mouth logs it against production).
+ * c_pin is the no-sound Levich film value at the height of the top-row centroids (run_resolved.py). */
+static int top_cell(cell_t c, Thread *t)
+{
+    int n;
+    c_face_loop(c, t, n)
+    {
+        Thread *tf = C_FACE_THREAD(c, t, n);
+        if (BOUNDARY_FACE_THREAD_P(tf) && THREAD_ID(tf) == TOP_ID)   /* boundary only: Fluent may renumber zones;
+                                                 run_resolved.py also checks the pinned volume = pitch x h_top */
+            return 1;
+    }
+    return 0;
+}
+
+static real pin_c(int i) { return (i == 0) ? PIN_C_OH : (i == 1) ? PIN_C_SIL : PIN_C_H2; }
+#endif
+
 /* i: UDS index; nu: stoichiometric coefficient per Si (OH- -2, silicate +1, H2 +2) */
 static real src(cell_t c, Thread *t, int i, real nu, real dS[], int eqn, int implicit)
 {
@@ -332,6 +356,13 @@ static real src(cell_t c, Thread *t, int i, real nu, real dS[], int eqn, int imp
         s_mix -= kb * (cell_c(c, t, 2) - C_H2_BUB);
         ds_mix -= kb * RHO;
     }
+#ifdef TOP_PIN_K
+    if (top_cell(c, t))                                       /* Case 10: hold the top row at the film value */
+    {
+        s_mix -= TOP_PIN_K * (cell_c(c, t, i) - pin_c(i));
+        ds_mix -= TOP_PIN_K * RHO;
+    }
+#endif
     av = C_UDMI(c, t, UDM_AV);
     if (av <= 0.0)
     {

@@ -85,7 +85,7 @@ def production(summ):
 
 def resistances(rows, prof, summ, J_w):
     """c(first row) and c(slit top) predicted from the measured resistances; plus the measured values"""
-    H = summ["H"]
+    H = summ.get("H_bc", summ["H"])          # top boundary: the pinned top-row centroids (fix 2026-11-27)
     cr = cell_rows(rows)
     ycs = [y for y, _ in cr]
     up = {round(r["y"], 13): r for r in prof if r["y"] > 0 and r["width"] > 0.99 * P.PITCH}
@@ -145,6 +145,32 @@ def extra_mix_height(prof, tol=0.01):
     return max(ys) if ys else float("nan")
 
 
+def stokes_metrics(rows, u_t, delta, H):
+    """numerics check against the exact Stokes layer (fix 2026-11-27: the first set ran 10 unconverged iterations
+    per step and the far-field oscillation came out 0.249 instead of 0.311 m/s). Mid-pitch column (farthest from
+    the slit). Returns: bulk amplitude / u_t (mean over 0.3 H < y < 0.7 H; exact solution 1), wall shear /
+    exact (first interior face, exact u_t sqrt2/delta e^(-y/delta)), height where the shear amplitude falls below
+    1 % of its wall value / exact (delta ln 100), searched below H/2 only, and the max profile error / u_t below 5 delta."""
+    nan = float("nan")
+    if u_t <= 0 or not rows:
+        return dict(bulk=nan, wall_shear=nan, layer=nan, profile_err=nan)
+    x_far = min(r["x"] for r in rows)
+    col = sorted((r for r in rows if abs(r["x"] - x_far) < 1e-12 and r["y"] > 0), key=lambda r: r["y"])
+    mid = [r["u_amp"] for r in col if 0.3 * H < r["y"] < 0.7 * H]
+    faces = [r for r in col if r.get("len", 0) > 0 and r["y"] < 0.5 * H]
+    out = dict(bulk=(sum(mid) / len(mid) / u_t) if mid else nan)
+    if faces:
+        f0 = faces[0]
+        y_f = f0.get("y_face") or f0["y"]
+        out["wall_shear"] = f0["shear_amp"] / (u_t * math.sqrt(2) / delta * math.exp(-y_f / delta))
+        out["layer"] = first_below_rows(faces, "shear_amp", 0.01) / (delta * math.log(100))
+    else:
+        out.update(wall_shear=nan, layer=nan)
+    err = [abs(r["u_amp"] - u_t * abs(1 - cmath.exp(-(1 + 1j) * r["y"] / delta))) / u_t for r in col if r["y"] < 5 * delta]
+    out["profile_err"] = max(err) if err else nan
+    return out
+
+
 def stokes_check(rows, summ):
     """mid-pitch column (farthest from the slit): Fluent's oscillation amplitude vs the exact Stokes layer"""
     u_t, delta = summ["u_t"], summ["delta"]
@@ -162,19 +188,19 @@ def analyse(case, root):
     J_w = production(summ)
     res = {}
     for ph in ("B", "S"):
-        rows = read_csvs(run, f"rows_{ph}_*.csv")
+        rows = read_csvs(run, f"rows_{ph}_[0-9]*.csv") or (read_csvs(run, "rows_S_B_[0-9]*.csv") if ph == "B" else [])
         if not rows:
             continue
         prof = profile(rows)
         r = resistances(rows, prof, summ, J_w)
         up = [q for q in prof if q["y"] > 0 and q["width"] > 0.99 * P.PITCH]
-        field = read_csvs(run, f"field_{ph}_*.csv")
+        field = read_csvs(run, f"field_{ph}_[0-9]*.csv") or (read_csvs(run, "field_S_B_[0-9]*.csv") if ph == "B" else [])
         sp = spread_profile(field) if field else []
         r.update(prof=prof, spread=sp,
                  flux_check=(sum(q["J"] for q in up) / len(up) / P.PITCH) / J_w - 1,
                  flux_row_scatter=(max(q["J"] for q in up) - min(q["J"] for q in up)) / abs(sum(q["J"] for q in up) / len(up)),
                  extra_mix_um=extra_mix_height(prof) * 1e6,
-                 shear_1pct_um=first_below_rows(up, "shear_amp", 0.01) * 1e6 if ph == "S" else float("nan"),
+                 shear_1pct_um=first_below_rows([q for q in up if q["y"] < 0.5 * summ["H"]], "shear_amp", 0.01) * 1e6 if ph == "S" else float("nan"),
                  spread_1pct_um=first_below(sp, 0.01) * 1e6, spread_first_row=sp[0][1] if sp else float("nan"),
                  stokes_err=stokes_check(rows, summ) if ph == "S" else float("nan"))
         res[ph] = r
