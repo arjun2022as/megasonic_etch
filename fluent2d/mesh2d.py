@@ -200,9 +200,13 @@ def check(nodes, cells, xs, ys, zones, W, L, layer, R, H, X0, X1, bubble_top=0.0
         raise RuntimeError(f"area {area} != {expect}")
 
 
-def write_msh(path, nodes, cells, zones, title):
+def write_msh(path, nodes, cells, zones, title, periodic_sides=False):
+    """periodic_sides: the side zones are written as walls "left"/"right" (Fluent pairs them with
+    /mesh/modify-zones/make-periodic; same rows on both sides, so the nodes match)."""
     nn, nc = len(nodes), len(cells)
-    order = [z for z in FACE_ZONES if zones[z[0]]]
+    fz = [(6, "left", "wall"), (7, "right", "wall")] if periodic_sides else []
+    table = [next((z for z in fz if z[0] == zid), (zid, name, zt)) for zid, name, zt in FACE_ZONES]
+    order = [z for z in table if zones[z[0]]]
     nf = sum(len(zones[z[0]]) for z in order)
     with open(path, "w", newline="\n") as f:
         f.write(f'(0 "{title}")\n(2 2)\n(10 (0 1 {nn:x} 0 2))\n(12 (0 1 {nc:x} 0))\n(13 (0 1 {nf:x} 0))\n')
@@ -244,6 +248,7 @@ def main(argv=None):
     ap.add_argument("--ratio", type=float, default=1.1)
     ap.add_argument("--bubble-top", type=float, default=0.0, help="depth of the top of the H2 plug below the mouth [m]")
     ap.add_argument("--bubble-len", type=float, default=0.0, help="length of the H2 plug along the slit [m], 0 = none")
+    ap.add_argument("--periodic-sides", action="store_true", help="side zones as walls left/right for make-periodic")
     ap.add_argument("-o", "--out", required=True)
     a = ap.parse_args(argv)
     nodes, cells, xs, ys, zones, ext = build(a.W, a.L, a.layer, a.recess, a.pitch, a.H, a.dx, a.dy, a.dy_top,
@@ -251,8 +256,9 @@ def main(argv=None):
     check(nodes, cells, xs, ys, zones, a.W, a.L, a.layer, a.recess, a.H, ext["X0"], ext["X1"], a.bubble_top,
           a.bubble_len)
     czones = write_msh(a.out, nodes, cells, zones, f"slit W={a.W:g} L={a.L:g} recess={a.recess:g} "
-                                                   f"bubble={a.bubble_top:g}+{a.bubble_len:g}")
-    info = dict(n_cells=len(cells), n_nodes=len(nodes), cell_zones=czones, poly_faces=len(zones[POLY_ID]),
+                                                   f"bubble={a.bubble_top:g}+{a.bubble_len:g}", a.periodic_sides)
+    area = sum((xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]) for i, j, _ in cells)
+    info = dict(liquid_area=area, n_cells=len(cells), n_nodes=len(nodes), cell_zones=czones, poly_faces=len(zones[POLY_ID]),
                 X0=ext["X0"], X1=ext["X1"], H=a.H, W=a.W, L=a.L, recess=a.recess, dx=a.dx, dy=a.dy,
                 bubble_top=a.bubble_top, bubble_len=a.bubble_len, bubble_faces=len(zones[BUBBLE_ID]) + len(zones[BUBBLE_POCKET_ID]))
     print(json.dumps(info))

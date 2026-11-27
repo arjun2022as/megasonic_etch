@@ -1,0 +1,7 @@
+case,walltime,f_MHz,I_W_cm2,theta_deg,slip,compress,recess_nm,H_um,settle_cycles,measure_cycles,iters,note
+R0_flat,24:00:00,0,0,90,1,1,0,10,300,200,10,"no sound, flat walls, resolved cell"
+R0_comb,36:00:00,0,0,90,1,1,300,10,300,200,10,"no sound, comb walls (300 nm recess)"
+R15_flat,96:00:00,1,2,15,1,1,0,10,300,200,10,"15 deg (slip + compression), flat walls"
+R15_comb,168:00:00,1,2,15,1,1,300,10,300,200,10,"15 deg (slip + compression), comb walls"
+R90_flat,96:00:00,1,2,90,1,1,0,10,300,200,10,"90 deg MegPie (compression only), flat walls"
+R15_flat_H5,96:00:00,1,2,15,1,1,0,5,300,200,10,"15 deg, flat walls, 5 um liquid cell (top-boundary check)"

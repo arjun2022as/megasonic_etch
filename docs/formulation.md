@@ -163,3 +163,31 @@ Results (results_1d/cavitation_table.csv, `python run_cavitation.py`), dispersio
 | 1 µm / 1 µm (near the mouth) | 0.38–0.82 | 2.7–11 % | 16–220 % | 3.5–15 % |
 
 Lower frequency gives more mixing (same velocity, larger displacement); mixing grows in proportion to power. A bubble at the floor (where H₂ supersaturation is highest) barely mixes OH⁻; a bubble near the mouth mixes the liquid above it strongly but cuts off everything below it.
+
+## 10. Case 10: resolved megasonic oscillation, no D_osc closure (`run_resolved.py`, 2026-11-26)
+
+Why: the D_osc closure (|u|²/2ω applied as extra diffusivity, also over the whole 54 µm Levich film) is an upper
+bound. A flow parallel to the wafer moves H₂ toward or away from it only where c varies along the wafer
+(u·∇c = u ∂c/∂x), i.e. within about one pitch of the mouths. Case 10 lets Fluent carry the species with the
+actual oscillating velocity and measures the mixing that results.
+
+- **Cell:** one pitch (1 µm), left/right periodic (`mesh2d --periodic-sides`, Fluent make-periodic), slit (flat or comb
+  300 nm), liquid height H = 10 µm (5 µm check). 44 k cells flat, 104 k comb.
+- **Sound (UDF `resolved_extra.c`):** tangential: body force ρ u_t ω cos ω(t−t₀) (far field slides as u_t sin ω(t−t₀);
+  the no-slip wafer forms the Stokes layer itself). Normal (pressure antinode): mass source −(ω p_wall/c²) cos ω(t−t₀)
+  in all liquid (linear compressibility, p uniform because λ ≫ cell); the same mass leaves through the top
+  (v_top amplitude = ω p_wall A_liq /(ρ c² pitch), 0.0143 m/s at 15°). u_t, p_wall from §5 (Brekhovskikh).
+  40 steps per period (25 ns).
+- **Top (y = H):** velocity inlet u = G H + u_t sin ω(t−t₀), v = v_top; species fixed at the no-sound Levich film
+  value at height H, c(H) = c_b + (c_s − c_b)(1 − k_m H/D) (near-wall profile linear; spin convection Pe ≈ 0.014 at
+  10 µm). The run checks the lateral spread of H₂ at the top: zero spread = sound cannot act above H.
+- **Phases:** B = no sound to quasi-steady (as run_case.py), rows recorded (baseline). S = sound on, 300 cycles to
+  settle the near-wafer region (local time (1 µm)²/D ≈ 0.1 ms = 100 cycles), then 200 cycles sampled every 4 steps.
+- **Measurement:** per row of horizontal faces, cycle-averaged H₂ flux (Fluent face mass flux × face c, plus
+  −D_H₂ dc/dy) and Σ dc/dy·length → D_eff(y) = −J/Σ(dc/dy·len). Pure diffusion gives D_eff = D_H₂ exactly
+  (tests/test_resolved.py). Predicted steady mouth: c(0) = c_top + J_w ∫₀^H dy/D_eff (analyze_resolved.py). The old
+  closure D_osc is computed from the same run for comparison.
+- **Still not resolved (stated):** the bubble cycle (none in case 10); mm-scale Rayleigh–Schlichting streaming; the
+  outer spin film above H (Levich, plain D); the Couette shear G = Ωr/gap (gap 2 mm ASSUMED, same as all runs);
+  input data (ER_ref, c_sat, D, γ, I). Electromigration and the D_i − D_BASE remainder are not applied across the
+  periodic faces (lateral gradients there are small; H₂ is neutral).

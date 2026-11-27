@@ -1,7 +1,12 @@
 /* Minimal stand-in for Fluent's udf.h, ONLY for a local syntax/type check of etch.c (clang -fsyntax-only).
    Macro shapes follow the Fluent UDF manual; nothing here is used on the cluster. */
-#include <math.h>
-#include <stdio.h>
+/* no system headers on the laptop: declare what the UDF uses */
+#define NULL ((void *)0)
+double sqrt(double); double fabs(double); double pow(double, double); double cos(double); double sin(double);
+double exp(double);
+typedef struct file_struct FILE;
+FILE *fopen(const char *, const char *); int fclose(FILE *); int fprintf(FILE *, const char *, ...);
+int sprintf(char *, const char *, ...);
 typedef double real;
 typedef int cell_t;
 typedef int face_t;
@@ -59,3 +64,27 @@ void Message0(const char *fmt, ...);
 #define DEFINE_UDS_FLUX(name, f, t, i) real name(face_t f, Thread *t, int i)
 #define DEFINE_DIFFUSIVITY(name, c, t, i) real name(cell_t c, Thread *t, int i)
 #define DEFINE_SOURCE(name, c, t, dS, eqn) real name(cell_t c, Thread *t, real dS[], int eqn)
+/* added for the current etch.c and resolved_extra.c */
+#define begin_c_loop_all(c, t) for (c = 0; c < 10; c++)
+#define end_c_loop_all(c, t)
+#define thread_loop_f(t, d) for (t = next_c_thread(d, NULL); t != NULL; t = next_c_thread(d, t))
+#define c_face_loop(c, t, n) for (n = 0; n < 4; n++)
+face_t cface(cell_t c, Thread *t, int n);
+Thread *cfthread(cell_t c, Thread *t, int n);
+#define C_FACE(c, t, n) cface(c, t, n)
+#define C_FACE_THREAD(c, t, n) cfthread(c, t, n)
+void *tstore(Thread *t, int sv);
+#define THREAD_STORAGE(t, sv) tstore(t, sv)
+#define SV_UDM_I 1
+#define SV_UDS_I(i) (10 + (i))
+#define SV_FLUX 2
+#define NNULLP(p) ((p) != NULL)
+#define THREAD_ID(t) ((t)->id)
+void Message(const char *fmt, ...);
+real flow_time(void);
+#define CURRENT_TIME flow_time()
+typedef struct node_struct { real x[2]; } Node;
+Node *cnode(cell_t c, Thread *t, int k);
+#define c_node_loop(c, t, k) for (k = 0; k < 4; k++)
+#define C_NODE(c, t, k) cnode(c, t, k)
+#define NODE_X(nd) ((nd)->x[0])

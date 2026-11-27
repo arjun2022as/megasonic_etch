@@ -299,3 +299,43 @@ def patch_uds(solver, zones, i, value):
     first_ok(f"patch uds-{i} = {value:g}",
              *[lambda var=var: ini.patch.calculate_patch(cell_zones=list(zones), variable=var, value=value)
                for var in (f"uds-{i}", f"uds-{i}-scalar", f"user-scalar-{i}", f"scalar-{i}")])
+
+
+# ---------------------------------------------------------------- case 10 (resolved oscillation)
+def make_periodic(solver, zone, shadow):
+    """Translational periodic pair from two matching side walls (nodes coincide row by row)."""
+    first_ok(f"make periodic {zone} <-> {shadow}",
+             lambda: tui(solver, f"/mesh/modify-zones/make-periodic {zone} {shadow} no yes yes"),
+             lambda: tui(solver, f"/mesh/modify-zones/make-periodic {zone} {shadow} no yes"),
+             lambda: tui(solver, f"/define/boundary-conditions/modify-zones/make-periodic {zone} {shadow} no yes yes"))
+    try:
+        tui(solver, "/mesh/check")
+    except Exception as e:  # noqa: BLE001
+        log("mesh check after make-periodic:", e)
+
+
+def _named_key(names, want):
+    w = want.lower().replace("_", "-")
+    for k in names:
+        if k.lower().replace("_", "-") == w:
+            return k
+    hits = [k for k in names if w in k.lower().replace("_", "-")]
+    if len(hits) == 1:
+        return hits[0]
+    raise KeyError(f"no source entry '{want}'; entries: {names}")
+
+
+def cell_sources_named(solver, zones, terms):
+    """terms: {equation name ('mass', 'x-momentum'): udf name}; same 24.1 layout as cell_sources."""
+    s = settings(solver)
+    for z in zones:
+        st = s.setup.cell_zone_conditions.fluid[z].source_terms
+        setv(st.sources, True)
+        tab = st.source_terms
+        names = list(tab.get_object_names())
+        log(f"cell zone {z} source entries:", names)
+        for want, f in terms.items():
+            k = _named_key(names, want)
+            first_ok(f"source {k} = {f} in {z}",
+                     *[lambda k=k, f=f, o=o: setv(tab[k], [{"option": o, "udf": f}])
+                       for o in ("udf", "user-defined", "UDF")])
