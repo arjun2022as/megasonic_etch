@@ -127,23 +127,31 @@ def solver_methods(solver, s):
                  lambda: api.setv(meth.p_v_coupling.flow_scheme, "Coupled"),
                  lambda: api.tui(solver, "/solve/set/p-v-coupling 24"))
     sd = meth.spatial_discretization
-
-    def via_settings():
-        ds = sd.discretization_scheme
-        keys = list(ds.get_object_names()) if hasattr(ds, "get_object_names") else list(ds.get_state())
-        api.log("discretization entries:", keys)
-        for k in keys:
-            if k == "pressure":
-                api.setv(ds[k], api.option(ds[k], "second-order", "second order"))
-            elif k == "mom" or k.startswith("uds"):
-                api.setv(ds[k], api.option(ds[k], "second-order-upwind", "second order upwind"))
-        api.log("discretization now:", ds.get_state())
-
-    api.first_ok("second-order schemes", via_settings,
-                 lambda: [api.tui(solver, f"/solve/set/discretization-scheme {k} 1") for k in
-                          ("mom", "uds-0", "uds-1", "uds-2")])
     try:
-        api.log("methods state:", str(meth.get_state())[:1500])
+        api.log("discretization BEFORE:", sd.get_state())
+    except Exception as e:  # noqa: BLE001
+        api.log("discretization state not readable:", e)
+
+    def want(k, cur):
+        return "second-order" if k == "pressure" else "second-order-upwind" if (k == "mom" or k.startswith("uds")) else cur
+
+    def whole_map():                      # discretization_scheme as one {equation: scheme} map
+        ds = sd.discretization_scheme
+        api.setv(ds, {k: want(k, v) for k, v in ds.get_state().items()})
+
+    def per_key():
+        ds = sd.discretization_scheme
+        for k, v in ds.get_state().items():
+            if want(k, v) != v:
+                api.setv(ds[k], want(k, v))
+
+    try:
+        api.first_ok("second-order schemes", whole_map, per_key)
+    except Exception as e:  # noqa: BLE001  (not fatal: the actual schemes are logged and reported)
+        api.log("WARNING: could not set the schemes; running with Fluent's defaults:", e)
+    try:
+        api.log("discretization AFTER:", sd.get_state())
+        api.log("p-v coupling AFTER:", meth.p_v_coupling.get_state())
     except Exception as e:  # noqa: BLE001
         api.log("methods state not readable:", e)
 
