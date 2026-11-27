@@ -80,14 +80,16 @@ def plan(row):
     else:
         u_t = p_wall = 0.0
     tops, cs = top_values(H)
-    p = dict(case=row["case"], f=f, I=I, theta=theta, omega=om, u_t=u_t, p_wall=p_wall, H=H, recess=recess,
+    refine = float(row.get("refine") or 1)
+    spc = int(row.get("steps_per_cycle") or STEPS_PER_CYCLE)
+    p = dict(refine=refine, spc=spc, sample_every=max(1, spc // 10),case=row["case"], f=f, I=I, theta=theta, omega=om, u_t=u_t, p_wall=p_wall, H=H, recess=recess,
              G=P.omega_spin() * P.R_PROBE / GAP, gap=GAP, c_top=tops, c_mouth_1d=cs, sound=u_t > 0 or p_wall > 0,
              settle_cycles=int(row["settle_cycles"]), measure_cycles=int(row["measure_cycles"]),
-             iters=int(row["iters"]), iters_B=20, dt=1 / (STEPS_PER_CYCLE * f),
+             iters=int(row["iters"]), iters_B=20, dt=1 / (spc * f),
              delta=A.stokes_delta(f), er_ref=P.ER_REF, order=P.ORDER_OH, migration=1, osc_scale=1.0,
              pump=dict(D={k: 0.0 for k in ("OH", "SIL", "H2", "TMA")}),
-             mesh=dict(W=P.W_SLIT, L=P.L_SLIT, layer=P.LAYER, recess=recess, pitch=P.PITCH, H=H, dx=5e-9,
-                       dy=10e-9, dy_top=5e-9, ratio=1.1, bubble_top=0.0, bubble_len=0.0))
+             mesh=dict(W=P.W_SLIT, L=P.L_SLIT, layer=P.LAYER, recess=recess, pitch=P.PITCH, H=H, dx=5e-9 / refine,
+                       dy=10e-9 / refine, dy_top=5e-9 / refine, ratio=1.1, bubble_top=0.0, bubble_len=0.0))
     return p
 
 
@@ -99,7 +101,8 @@ def mesh_args(p, out):
 
 
 def header_resolved(p):
-    extra = dict(U_T=p["u_t"], P_WALL=p["p_wall"], C_SOUND_L=P.C_SOUND, ROW1_Y=p["mesh"]["dy_top"])
+    extra = dict(U_T=p["u_t"], P_WALL=p["p_wall"], C_SOUND_L=P.C_SOUND, ROW1_Y=p["mesh"]["dy_top"],
+                 DY_SLIT=p["mesh"]["dy"])
     return header(p) + "".join(f"#define {k} {v:.12g}\n" for k, v in extra.items())
 
 
@@ -112,6 +115,37 @@ def expressions(p, t0, amp_t, amp_n):
     if amp_n and p["p_wall"] > 0:
         v = f"-{w(p['v_top_amp'])} [m/s] * cos({w(p['omega'])} [s^-1] * (t - {w(t0)} [s]))"
     return u, v
+
+
+def solver_methods(solver, s):
+    """Explicit numerics (independent review 2026-11-26): the default SIMPLE with low under-relaxation barely
+    converges a step whose viscous number nu dt / dy^2 is ~470 (each step is a near-steady Stokes solve); first-order
+    upwind on the scalars would add numerical lateral diffusion ~u dx / 2 = 8 % of D_H2. So: Coupled pressure-velocity,
+    second-order upwind for momentum, pressure second order, and every scalar; logged for the report."""
+    meth = s.solution.methods
+    api.first_ok("p-v coupling = Coupled",
+                 lambda: api.setv(meth.p_v_coupling.flow_scheme, "Coupled"),
+                 lambda: api.tui(solver, "/solve/set/p-v-coupling 24"))
+    sd = meth.spatial_discretization
+
+    def via_settings():
+        ds = sd.discretization_scheme
+        keys = list(ds.get_object_names()) if hasattr(ds, "get_object_names") else list(ds.get_state())
+        api.log("discretization entries:", keys)
+        for k in keys:
+            if k == "pressure":
+                api.setv(ds[k], api.option(ds[k], "second-order", "second order"))
+            elif k == "mom" or k.startswith("uds"):
+                api.setv(ds[k], api.option(ds[k], "second-order-upwind", "second order upwind"))
+        api.log("discretization now:", ds.get_state())
+
+    api.first_ok("second-order schemes", via_settings,
+                 lambda: [api.tui(solver, f"/solve/set/discretization-scheme {k} 1") for k in
+                          ("mom", "uds-0", "uds-1", "uds-2")])
+    try:
+        api.log("methods state:", str(meth.get_state())[:1500])
+    except Exception as e:  # noqa: BLE001
+        api.log("methods state not readable:", e)
 
 
 def collect(out, pattern, new_prefix):
@@ -184,6 +218,7 @@ def main():
         api.user_memory(solver, N_UDM)
         api.compile_load_udf(solver, out)
         api.user_scalars(solver, 3, f"uds_flux::{api.UDF_LIB}")
+        solver_methods(solver, s)
         api.first_ok("early initialization", lambda: s.solution.initialization.standard_initialize())
         d_base = max(P.D[k] for k in ("OH", "SIL", "H2"))
         api.uds_diffusivity(solver, mat, [P.RHO_L * d_base] * 3)
@@ -238,7 +273,7 @@ def main():
             mrow, mslit = mouth_now(out)
             hist.append(dict(t=t_sim, dt=dt, c_h2_mouth=mrow, c_h2_slit_top=mslit,
                              **{k: v for k, v in m.items() if k != "layers"}))
-            api.log(f"phase B t = {t_sim:.4g} s: bottom/top {m['uniformity']:.5f}, H2 first row {mrow:.3f} mM "
+            api.log(f"phase B t = {t_sim:.4g} s: bottom/top {m['uniformity']:.5f}, H2 first-row mean {mrow:.3f} mM "
                     f"({mrow / P.H2_SAT:.2f}x), slit top {mslit:.3f} mM, c_SIL bottom {m['c_sil_bottom']:.1f}")
         # baseline rows (steady): a few samples with the same measurement
         api.on_demand(solver, "start_rows")
@@ -267,29 +302,34 @@ def main():
             done = 0
             while done < settle:
                 nc = min(LOG_EVERY_CYCLES, settle - done)
-                api.iterate(solver, (1 if a.setup_only else nc * STEPS_PER_CYCLE), p["iters"])
+                api.iterate(solver, (1 if a.setup_only else nc * p["spc"]), p["iters"])
                 done += nc
                 api.on_demand(solver, "dump_mouth")
                 mrow, mslit = mouth_now(out)
-                mouth_log.append(dict(cycles=done, c_h2_row1=mrow, c_h2_slit_top=mslit))
-                api.log(f"phase S settle: {done} cycles, H2 first row {mrow:.3f} mM ({mrow / P.H2_SAT:.2f}x), "
+                mouth_log.append(dict(cycles=done, c_h2_row_mean=mrow, c_h2_slit_top=mslit))
+                api.log(f"phase S settle: {done} cycles, H2 first-row mean {mrow:.3f} mM ({mrow / P.H2_SAT:.2f}x), "
                         f"slit top {mslit:.3f} mM (instantaneous)")
             api.on_demand(solver, "start_rows")
-            n_samples = 4 if a.setup_only else p["measure_cycles"] * STEPS_PER_CYCLE // SAMPLE_EVERY
+            se, spc = p["sample_every"], p["spc"]
+            n_samples = 4 if a.setup_only else p["measure_cycles"] * spc // se
             for k in range(n_samples):
-                api.iterate(solver, SAMPLE_EVERY, p["iters"])
+                api.iterate(solver, se, p["iters"])
                 api.on_demand(solver, "acc_rows")
-                if (k + 1) % (LOG_EVERY_CYCLES * STEPS_PER_CYCLE // SAMPLE_EVERY) == 0:
+                if (k + 1) % (LOG_EVERY_CYCLES * spc // se) == 0:
                     api.on_demand(solver, "dump_mouth")
                     mrow, mslit = mouth_now(out)
-                    mouth_log.append(dict(cycles=settle + (k + 1) * SAMPLE_EVERY // STEPS_PER_CYCLE,
-                                          c_h2_row1=mrow, c_h2_slit_top=mslit))
-                    api.log(f"phase S measure: sample {k + 1}/{n_samples}, H2 first row {mrow:.3f} mM")
+                    mouth_log.append(dict(cycles=settle + (k + 1) * se // spc,
+                                          c_h2_row_mean=mrow, c_h2_slit_top=mslit))
+                    api.log(f"phase S measure: sample {k + 1}/{n_samples}, H2 first-row mean {mrow:.3f} mM, slit top {mslit:.3f} mM")
             api.on_demand(solver, "finish_avg")                        # closure D_osc, for comparison only
             api.on_demand(solver, "dump_rows")
             collect(out, "rows_*.csv", "rows_S_")
+            # whole number of cycles since sound_on: the liquid is back where it started (displacement
+            # (u_t/w)(1 - cos)), so this snapshot is phase-matched with field_B (review A2: compare spreads here,
+            # not on cycle-averaged values, which a sliding field blurs)
             api.on_demand(solver, "dump_field")
             collect(out, "field_*.csv", "field_S_")
+            api.on_demand(solver, "clear_dosc")                        # closure value must not act on a restart
             api.on_demand(solver, "sound_off")
             api.first_ok("write case/data S",
                          lambda: s.file.write(file_type="case-data", file_name=f"{a.case}-S.cas.h5"))

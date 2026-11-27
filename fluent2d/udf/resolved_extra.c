@@ -252,7 +252,8 @@ DEFINE_ON_DEMAND(dump_mouth)
                 s_row += cell_c(c, t, 2) * w;
                 l_row += w;
             }
-            else if (x[1] < 0.0 && x[1] > -ROW1_Y && x[0] > 0.0 && x[0] < W_SLIT)
+            else if (x[1] < 0.0 && x[1] > -DY_SLIT && x[0] > 0.0 && x[0] < W_SLIT)   /* top slit row (centroid
+                                                    -DY_SLIT/2; the old -ROW1_Y test missed it, review C1) */
             {
                 s_slit += cell_c(c, t, 2);
                 n_slit += 1.0;
@@ -266,5 +267,13 @@ DEFINE_ON_DEMAND(dump_mouth)
         return;
     fprintf(fp, "s_row,l_row,s_slit,n_slit\n%.12e,%.12e,%.12e,%g\n", s_row, l_row, s_slit, n_slit);
     fclose(fp);
+#endif
+}
+
+/* the closure D_osc (UDM 5) is only for comparison: clear it so a restart from the saved case does not mix twice */
+DEFINE_ON_DEMAND(clear_dosc)
+{
+#if !RP_HOST
+    zero_udm(Get_Domain(1), UDM_DOSC, UDM_DOSC);
 #endif
 }

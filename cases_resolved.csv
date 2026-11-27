@@ -1,8 +1,9 @@
-case,walltime,f_MHz,I_W_cm2,theta_deg,slip,compress,recess_nm,H_um,settle_cycles,measure_cycles,iters,note
-R0_flat,24:00:00,0,0,90,1,1,0,10,300,200,10,"no sound, flat walls, resolved cell"
-R0_comb,36:00:00,0,0,90,1,1,300,10,300,200,10,"no sound, comb walls (300 nm recess)"
-R15_flat,96:00:00,1,2,15,1,1,0,10,300,200,10,"15 deg (slip + compression), flat walls"
-R15_comb,168:00:00,1,2,15,1,1,300,10,300,200,10,"15 deg (slip + compression), comb walls"
-R90_flat,96:00:00,1,2,90,1,1,0,10,300,200,10,"90 deg MegPie (compression only), flat walls"
-R15_flat_H5,96:00:00,1,2,15,1,1,0,5,300,200,10,"15 deg, flat walls, 5 um liquid cell (top-boundary check)"
-R15_flat_H20,120:00:00,1,2,15,1,1,0,20,300,200,10,"15 deg, flat walls, 20 um liquid cell (top-boundary check)"
+case,walltime,f_MHz,I_W_cm2,theta_deg,slip,compress,recess_nm,H_um,settle_cycles,measure_cycles,iters,refine,steps_per_cycle,note
+R0_flat,12:00:00,0,0,90,1,1,0,10,300,200,10,1,40,"no sound, flat walls, resolved cell"
+R0_comb,24:00:00,0,0,90,1,1,300,10,300,200,10,1,40,"no sound, comb walls (300 nm recess)"
+R15_flat,24:00:00,1,2,15,1,1,0,10,300,200,10,1,40,"15 deg (slip + compression), flat walls - WHAT-IF (flat MegPie cannot tilt)"
+R15_comb,48:00:00,1,2,15,1,1,300,10,300,200,10,1,40,"15 deg (slip + compression), comb walls - WHAT-IF"
+R90_flat,12:00:00,1,2,90,1,1,0,10,50,50,10,1,40,"90 deg flat MegPie = REAL TOOL (compression only), flat walls"
+R15_flat_H5,24:00:00,1,2,15,1,1,0,5,300,200,10,1,40,"15 deg, flat walls, 5 um liquid cell (top-boundary check)"
+R15_flat_H20,36:00:00,1,2,15,1,1,0,20,300,200,10,1,40,"15 deg, flat walls, 20 um liquid cell (top-boundary check)"
+R15_flat_fine,72:00:00,1,2,15,1,1,0,10,100,50,10,2,80,"15 deg, flat walls, cells 2x finer and 80 steps per cycle (numerical check)"
