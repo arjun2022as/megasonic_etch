@@ -53,9 +53,30 @@ def profile(rows):
         cm = sum(r["c_h2"] * r["len"] for r in rs) / w
         sd = math.sqrt(max(sum((r["c_h2"] - cm) ** 2 * r["len"] for r in rs) / w, 0.0))
         dosc = sum(r["d_osc"] * r["len"] for r in rs) / w
+        lm = lambda k: sum(r.get(k, 0.0) * r["len"] for r in rs) / w      # noqa: E731
         out.append(dict(y=y, J=J, Jc=Jc, width=w, D_eff=-J / g if g else float("nan"), c_mean=cm, c_spread=sd,
-                        d_osc=dosc))
+                        d_osc=dosc, u_amp=lm("u_amp"), shear_amp=lm("shear_amp"), shear_mean=lm("shear_mean")))
     return out
+
+
+def first_below(up, key, frac, ref_y=0.1e-6):
+    """lowest height above which key stays below frac x its near-wafer maximum: decided by the run, not set"""
+    ref = max((r[key] for r in up if r["y"] < ref_y), default=0.0)
+    if ref <= 0:
+        return float("nan")
+    for i, r in enumerate(up):
+        if all(q[key] < frac * ref for q in up[i:]):
+            return r["y"]
+    return float("nan")
+
+
+def layers(prof):
+    """thicknesses that Fluent decides: oscillating shear, extra mixing, lateral H2 spread (1 % and 5 % levels)"""
+    up = [r for r in prof if r["y"] > 0]
+    for r in up:
+        r["extra_mix"] = max(r["D_eff"] / P.D["H2"] - 1.0, 0.0)
+    return {f"{k}_{int(fr * 100)}pct_um": first_below(up, k, fr) * 1e6
+            for k in ("shear_amp", "extra_mix", "c_spread") for fr in (0.05, 0.01)}
 
 
 def mouth_prediction(prof, c_top, pitch=P.PITCH):
@@ -97,7 +118,8 @@ def main():
                               D_eff_over_D_near=sum(r["D_eff"] for r in near) / len(near) / P.D["H2"],
                               D_eff_over_D_far=sum(r["D_eff"] for r in far) / len(far) / P.D["H2"],
                               closure_Dosc_over_D_near=sum(r["d_osc"] for r in near) / len(near) / P.D["H2"],
-                              spread_top_rel=far[-1]["c_spread"] / max(far[-1]["c_mean"], 1e-30)))
+                              spread_top_rel=far[-1]["c_spread"] / max(far[-1]["c_mean"], 1e-30),
+                              H_um=summ["H"] * 1e6, **layers(prof)))
             with open(out / f"profile_{case}_{phase}.csv", "w", newline="") as f:
                 w = csv.DictWriter(f, fieldnames=list(prof[0]), lineterminator="\n")
                 w.writeheader()
@@ -109,7 +131,9 @@ def main():
     for t in table:
         print(f"{t['case']:12s} {t['phase']:9s} mouth (pred.) {t['mouth_pred_x']:7.2f}x  top {t['c_top_x']:6.2f}x  "
               f"D_eff/D near wafer {t['D_eff_over_D_near']:7.3f}  far {t['D_eff_over_D_far']:6.3f}  "
-              f"closure D_osc/D near {t['closure_Dosc_over_D_near']:7.3f}  spread at top {t['spread_top_rel']:.2e}")
+              f"closure D_osc/D near {t['closure_Dosc_over_D_near']:7.3f}  spread at top {t['spread_top_rel']:.2e}\n"
+              f"{'':22s}layers decided by Fluent (1 % level): shear {t['shear_amp_1pct_um']:.3g} um, extra mixing "
+              f"{t['extra_mix_1pct_um']:.3g} um, lateral H2 spread {t['c_spread_1pct_um']:.3g} um (cell {t['H_um']:g} um)")
     try:
         plot(profs, out)
     except ImportError:
@@ -120,7 +144,7 @@ def plot(profs, out):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+    fig, ax = plt.subplots(1, 4, figsize=(20, 5))
     for (case, phase), prof in profs.items():
         up = [r for r in prof if r["y"] > 0]
         lab = f"{case} {'no sound' if phase == 'B' else 'sound'}"
@@ -131,11 +155,15 @@ def plot(profs, out):
                        label=f"{case} closure 1 + D_osc/D (old method)")
         ax[1].plot([max(r["c_spread"], 1e-12) for r in up], [r["y"] * 1e6 for r in up], ls, label=lab)
         ax[2].plot([r["c_mean"] / P.H2_SAT for r in prof], [r["y"] * 1e6 for r in prof], ls, label=lab)
+        if phase == "S":
+            ax[3].plot([max(r["shear_amp"], 1e-3) for r in up], [r["y"] * 1e6 for r in up], ls, label=lab)
     ax[0].set(xlabel="D_eff / D_H2 (resolved)", ylabel="height above wafer (um)", yscale="log", xscale="log",
               title="mixing the resolved flow really gives")
     ax[1].set(xlabel="lateral spread of c_H2 along the row (mM)", xscale="log", yscale="log",
               title="sound can mix only where this is > 0")
     ax[2].set(xlabel="lateral mean H2 / c_sat (x)", ylabel="y (um), slit below 0", title="cycle-averaged H2")
+    ax[3].set(xlabel="oscillating shear amplitude du/dy (1/s), from the run", xscale="log", yscale="log",
+              title="the sheared layer Fluent produces")
     for x in ax:
         x.legend(fontsize=7)
     fig.suptitle("Case 10: " + NOTE, fontsize=9)

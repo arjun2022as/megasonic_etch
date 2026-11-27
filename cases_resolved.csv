@@ -5,3 +5,4 @@ R15_flat,96:00:00,1,2,15,1,1,0,10,300,200,10,"15 deg (slip + compression), flat 
 R15_comb,168:00:00,1,2,15,1,1,300,10,300,200,10,"15 deg (slip + compression), comb walls"
 R90_flat,96:00:00,1,2,90,1,1,0,10,300,200,10,"90 deg MegPie (compression only), flat walls"
 R15_flat_H5,96:00:00,1,2,15,1,1,0,5,300,200,10,"15 deg, flat walls, 5 um liquid cell (top-boundary check)"
+R15_flat_H20,120:00:00,1,2,15,1,1,0,20,300,200,10,"15 deg, flat walls, 20 um liquid cell (top-boundary check)"

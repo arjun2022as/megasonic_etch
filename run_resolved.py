@@ -40,7 +40,7 @@ from run_case import MAX_EXTRA_BLOCKS, metrics, read_dumps  # noqa: E402
 CASES_CSV = HERE / "cases_resolved.csv"
 FLUID_ZONES = ("bulk", "slit", "pocket")
 STEPS_PER_CYCLE, SAMPLE_EVERY, LOG_EVERY_CYCLES = 40, 4, 50
-N_UDM = 17
+N_UDM = 19
 
 
 def load(name, path):

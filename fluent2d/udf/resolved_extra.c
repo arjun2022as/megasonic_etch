@@ -27,7 +27,9 @@
 #define UDM_RN 14    /* number of samples */
 #define UDM_RLEN 15  /* top-face length [m] (0 = no interior top face) */
 #define UDM_RYF 16   /* top-face y [m] */
-#define N_UDM_RESOLVED 17
+#define UDM_RSH 17   /* sum of the shear du/dy at the top face [1/s] */
+#define UDM_RSH2 18  /* sum of its square */
+#define N_UDM_RESOLVED 19
 
 #if !RP_HOST
 static int sound_flag = 0;
@@ -99,7 +101,7 @@ DEFINE_ON_DEMAND(start_rows)
 {
 #if !RP_HOST
     Domain *d = Get_Domain(1);
-    zero_udm(d, UDM_RJC, UDM_RYF);
+    zero_udm(d, UDM_RJC, UDM_RSH2);
     zero_udm(d, UDM_SU, UDM_SVV);
     zero_udm(d, UDM_N, UDM_N);
     Message0("start_rows: accumulating H2 fluxes per row and velocity statistics\n");
@@ -152,6 +154,11 @@ DEFINE_ON_DEMAND(acc_rows)
                 C_UDMI(c, t, UDM_RG) += (cnv - ci) / dy * len;
                 C_UDMI(c, t, UDM_RLEN) = len;
                 C_UDMI(c, t, UDM_RYF) = xf[1];
+                {
+                    real sh = (C_U(cn, tn) - u) / dy;          /* shear the flow itself makes */
+                    C_UDMI(c, t, UDM_RSH) += sh;
+                    C_UDMI(c, t, UDM_RSH2) += sh * sh;
+                }
             }
         }
         end_c_loop_int(c, t)
@@ -178,7 +185,7 @@ DEFINE_ON_DEMAND(dump_rows)
     fp = fopen(name, "w");
     if (fp == NULL)
         return;
-    fprintf(fp, "zone,x,y,dx,y_face,len,jc,jd,grad,c_h2,n,d_osc\n");
+    fprintf(fp, "zone,x,y,dx,y_face,len,jc,jd,grad,c_h2,n,d_osc,u_amp,shear_mean,shear_amp\n");
     thread_loop_c(t, d)
     {
         if (!HAS_UDM(t) || !HAS_UDS(t))
@@ -198,10 +205,17 @@ DEFINE_ON_DEMAND(dump_rows)
                 xmax = MAX(xmax, NODE_X(nd));
             }
             dxc = xmax - xmin;
-            fprintf(fp, "%d,%.9e,%.9e,%.6e,%.9e,%.6e,%.9e,%.9e,%.9e,%.9e,%g,%.6e\n", THREAD_ID(t), x[0], x[1], dxc,
-                    C_UDMI(c, t, UDM_RYF), C_UDMI(c, t, UDM_RLEN), C_UDMI(c, t, UDM_RJC) / n,
-                    C_UDMI(c, t, UDM_RJD) / n, C_UDMI(c, t, UDM_RG) / n, C_UDMI(c, t, UDM_RC) / n, n,
-                    C_UDMI(c, t, UDM_DOSC));
+            {
+                /* oscillation amplitudes from the sampled statistics (sinusoid: amplitude = sqrt(2 variance)) */
+                real nu_ = MAX(C_UDMI(c, t, UDM_N), 1.0), mu_ = C_UDMI(c, t, UDM_SU) / nu_;
+                real u_amp = sqrt(2.0 * MAX(C_UDMI(c, t, UDM_SUU) / nu_ - mu_ * mu_, 0.0));
+                real sm = C_UDMI(c, t, UDM_RSH) / n;
+                real s_amp = sqrt(2.0 * MAX(C_UDMI(c, t, UDM_RSH2) / n - sm * sm, 0.0));
+                fprintf(fp, "%d,%.9e,%.9e,%.6e,%.9e,%.6e,%.9e,%.9e,%.9e,%.9e,%g,%.6e,%.6e,%.6e,%.6e\n", THREAD_ID(t),
+                        x[0], x[1], dxc, C_UDMI(c, t, UDM_RYF), C_UDMI(c, t, UDM_RLEN), C_UDMI(c, t, UDM_RJC) / n,
+                        C_UDMI(c, t, UDM_RJD) / n, C_UDMI(c, t, UDM_RG) / n, C_UDMI(c, t, UDM_RC) / n, n,
+                        C_UDMI(c, t, UDM_DOSC), u_amp, sm, s_amp);
+            }
         }
         end_c_loop_int(c, t)
     }

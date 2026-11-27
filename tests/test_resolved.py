@@ -54,3 +54,13 @@ def test_top_values_between_mouth_and_bulk():
     assert 0 < tops["H2"] < cs["H2"]
     k = P.levich_km(P.D["H2"], P.omega_spin())
     assert abs(tops["H2"] - cs["H2"] * (1 - k * 10e-6 / P.D["H2"])) < 1e-12
+
+
+def test_layer_thickness_found_from_data():
+    """a Stokes-like decay exp(-y/delta) must give the 1 % thickness delta ln(100) from the rows alone"""
+    delta, rows = 0.39e-6, []
+    for j in range(1, 400):
+        y = j * 0.025e-6
+        rows.append(dict(y=y, shear_amp=math.exp(-y / delta), D_eff=P.D["H2"], c_spread=0.0))
+    got = AR.first_below(rows, "shear_amp", 0.01)
+    assert abs(got - delta * math.log(100)) < 0.03e-6

@@ -5,7 +5,8 @@
   R15_*   1 MHz, 2 W/cm2 at 15 deg: tangential slip u_t = 0.311 m/s + wall pressure 0.49 MPa (compression)
   R90_*   1 MHz, 2 W/cm2 at 90 deg (flat MegPie): no slip, wall pressure 0.458 MPa (compression only)
   _flat / _comb   flat walls / poly-Si recessed 300 nm (comb)
-  _H5     liquid cell 5 um instead of 10 um (check that the top of the cell does not steer the result)
+  _H5, _H20   liquid cell 5 / 20 um instead of 10 um: if the results do not change with the cell height, the
+              top boundary is not steering them (the sheared layer and the mixing are decided by the flow itself)
 Columns slip / compress switch the two parts of the sound on (1) or off (0).
 """
 import csv
@@ -28,6 +29,8 @@ ROWS = [
     row("R15_comb", "15 deg (slip + compression), comb walls", 2, 15, recess=300, walltime="168:00:00"),
     row("R90_flat", "90 deg MegPie (compression only), flat walls", 2, 90, walltime="96:00:00"),
     row("R15_flat_H5", "15 deg, flat walls, 5 um liquid cell (top-boundary check)", 2, 15, H=5, walltime="96:00:00"),
+    row("R15_flat_H20", "15 deg, flat walls, 20 um liquid cell (top-boundary check)", 2, 15, H=20,
+        walltime="120:00:00"),
 ]
 
 if __name__ == "__main__":
