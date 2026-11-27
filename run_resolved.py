@@ -126,31 +126,35 @@ def solver_methods(solver, s):
     api.first_ok("p-v coupling = Coupled",
                  lambda: api.setv(meth.p_v_coupling.flow_scheme, "Coupled"),
                  lambda: api.tui(solver, "/solve/set/p-v-coupling 24"))
-    sd = meth.spatial_discretization
-    try:
-        api.log("discretization BEFORE:", sd.get_state())
-    except Exception as e:  # noqa: BLE001
-        api.log("discretization state not readable:", e)
+    def scheme_map():                     # 24.1: methods.discretization_scheme (from the 2026-11-26 traceback)
+        for name in ("discretization_scheme", "spatial_discretization"):
+            try:
+                obj = getattr(meth, name)
+                return obj.discretization_scheme if name == "spatial_discretization" else obj
+            except AttributeError:
+                continue
+        raise AttributeError("no discretization_scheme under solution.methods")
 
     def want(k, cur):
         return "second-order" if k == "pressure" else "second-order-upwind" if (k == "mom" or k.startswith("uds")) else cur
 
-    def whole_map():                      # discretization_scheme as one {equation: scheme} map
-        ds = sd.discretization_scheme
+    def whole_map():
+        ds = scheme_map()
         api.setv(ds, {k: want(k, v) for k, v in ds.get_state().items()})
 
     def per_key():
-        ds = sd.discretization_scheme
+        ds = scheme_map()
         for k, v in ds.get_state().items():
             if want(k, v) != v:
                 api.setv(ds[k], want(k, v))
 
     try:
+        api.log("discretization BEFORE:", scheme_map().get_state())
         api.first_ok("second-order schemes", whole_map, per_key)
     except Exception as e:  # noqa: BLE001  (not fatal: the actual schemes are logged and reported)
         api.log("WARNING: could not set the schemes; running with Fluent's defaults:", e)
     try:
-        api.log("discretization AFTER:", sd.get_state())
+        api.log("discretization AFTER:", scheme_map().get_state())
         api.log("p-v coupling AFTER:", meth.p_v_coupling.get_state())
     except Exception as e:  # noqa: BLE001
         api.log("methods state not readable:", e)
